@@ -1,0 +1,62 @@
+# Copy to configs/dev.yml (gitignored) and fill in for local development.
+# For Databricks runs, pass parameters through databricks.yml variables.
+
+unity_catalog:
+  catalog: "mimic_icd_dev"
+  bronze_schema: "bronze"
+  silver_schema: "silver"
+  gold_schema: "gold"
+  models_schema: "models"
+
+data:
+  # Paths used when running locally against a small extract (not real MIMIC).
+  # In Databricks, override via job parameters.
+  notes_path: "./data/discharge_sample.csv.gz"
+  diagnoses_path: "./data/diagnoses_icd_sample.csv.gz"
+  admissions_path: "./data/admissions_sample.csv.gz"
+  patients_path: "./data/patients_sample.csv.gz"
+  # Optional: MIMIC-IV Hosp ICD code dictionary. Needed for human-readable
+  # code descriptions in the data card and top-K table. Leave unset to skip.
+  # d_icd_path: "./data/d_icd_diagnoses_sample.csv.gz"
+
+cohort:
+  icd_version: 10                    # ICD-10 only
+  min_note_tokens: 100
+  top_k_labels: 50
+  note_types: ["DS"]                 # Discharge summary
+
+split:
+  train_frac: 0.80
+  val_frac: 0.10
+  test_frac: 0.10
+  seed: 42
+  strategy: "patient_stratified"
+
+baseline:
+  tfidf_ngram_range: [1, 2]
+  tfidf_min_df: 5
+  tfidf_max_features: 200000
+  logreg_c: 1.0
+  logreg_class_weight: "balanced"
+
+transformer:
+  model_name: "emilyalsentzer/Bio_ClinicalBERT"
+  max_length: 512
+  batch_size: 16
+  learning_rate: 2.0e-5
+  epochs: 3
+  warmup_ratio: 0.1
+  weight_decay: 0.01
+  fp16: true
+
+evaluation:
+  threshold_strategy: "per_label_pr"    # per-label PR optimization on val
+  top_k_metrics: [5, 8, 15]
+
+mlflow:
+  experiment_name: "/Users/${workspace.current_user.userName}/mimic-icd-coder"
+  registry_model_name: "mimic_icd.models.discharge_top50"
+
+logging:
+  level: "INFO"
+  format: "console"

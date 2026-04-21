@@ -1,0 +1,100 @@
+---
+title: "MIMIC-IV ICD-10 Auto-Coding — Evaluation Report"
+author: "Nancy Tanaka"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    theme: cosmo
+    code-fold: true
+    code-tools: true
+---
+
+# Summary
+
+*To be filled after baseline training completes.*
+
+One paragraph: model choice, cohort, headline metrics, delta versus Mullenbach et al. 2018.
+
+# Research Question
+
+Given a free-text discharge summary, predict the set of ICD-10 codes assigned to that admission. Benchmark against Mullenbach et al. 2018 CAML (MIMIC-III top-50 ICD-9).
+
+# Data
+
+Cohort construction, composition, and limitations are documented in [`reports/data_card.md`](data_card.md). Headline numbers:
+
+- MIMIC-IV-Note v2.2 + MIMIC-IV v3.1 Hosp, joined on `hadm_id`.
+- Top-50 ICD-10 codes covering 91.04% of admissions; long tail spans 19,440 distinct codes.
+- Modelable cohort: **122,288 admissions**.
+- Splits: patient-level 80/10/10 by `subject_id`, seed = 42.
+
+# Methods
+
+| Component | Choice | Rationale |
+|---|---|---|
+| Preprocessing | Collapse `___` to `[REDACTED]`, normalize whitespace, drop notes under 100 tokens | Minimal intervention; preserves clinical language |
+| Split | Patient-level, seed = 42 | 44.83% of patients have multiple admissions; admission-level splits would leak |
+| Baseline | TF-IDF (1–2 gram, min_df = 5) + one-vs-rest Logistic Regression | Interpretable control; defines the floor every transformer must clear |
+| Primary transformer | Bio_ClinicalBERT with chunk-and-max-pool over 512-token chunks | 98.74% of notes exceed a single 512-token window; chunking recovers the signal |
+| Fallback | Clinical-Longformer, 4K tokens | Escalation only if chunked BERT misses target by more than 3 F1 points |
+| Thresholds | Per-label F1 optimization on validation set | Label prevalence spans ~1–20%; a single global threshold underfits rare labels |
+
+Full rationale in [`DECISIONS.md`](../DECISIONS.md).
+
+# Results
+
+## Headline Metrics (Test Split)
+
+| Metric | Baseline (TF-IDF + LR) | Chunked Bio_ClinicalBERT | Mullenbach 2018 (MIMIC-III) | Target | Floor |
+|---|---|---|---|---|---|
+| Micro F1 | TBD | TBD | 0.539 | ≥ 0.70 | 0.55 |
+| Macro F1 | TBD | TBD | 0.088 | ≥ 0.55 | 0.40 |
+| P@5 | TBD | TBD | 0.609 | ≥ 0.70 | — |
+| P@8 | TBD | TBD | 0.523 | ≥ 0.65 | — |
+
+## Per-Label Error Analysis
+
+Top 10 lowest-F1 labels with likely error source for each (sub-code fragmentation, low prevalence, documentation style). TBD.
+
+## Calibration
+
+Reliability curve and Brier score per label. TBD.
+
+## Fairness Slices
+
+Macro F1 reported by:
+
+- **Gender** (F vs. M)
+- **Age bucket** (18-29, 30-44, 45-54, 55-64, 65-74, 75-84, 85+) with the caveat that `anchor_age` is capped at 89
+- **Admission frequency** (single-admit vs. 5+ admits)
+
+Temporal fairness deferred pending Silver-stage date un-shifting. Race- and ethnicity-stratified analysis deferred pending Bronze schema extension. See [`DECISIONS.md`](../DECISIONS.md) 2026-04-21.
+
+# Comparison to Mullenbach 2018
+
+Metric deltas are reported with the following caveats:
+
+- Cohort differences — size (47K MIMIC-III vs. 122K here), era (pre-2015 vs. 2008–2019), code system (ICD-9 vs. ICD-10).
+- ICD-10 sub-code fragmentation redistributes common conditions (CHF, CKD, COPD, T2DM) across several codes, so top-50 label spaces are not identical.
+- CAML trained on full-length notes with custom attention; this work uses chunked Bio_ClinicalBERT.
+
+Deltas are informative but not strictly apples-to-apples.
+
+# Limitations
+
+See [`reports/data_card.md`](data_card.md). Key points relevant to eval interpretation:
+
+- Cohort is 48% of all ICD-10 admissions in v3.1 Hosp, limited by MIMIC-IV-Note v2.2 sampling.
+- Temporal and race-stratified fairness evaluation are deferred, not absent.
+- Top-50 K is comparability-driven, not coverage-optimal; raising K would improve coverage but weaken the CAML comparison.
+
+# References
+
+- Mullenbach J, Wiegreffe S, Duke J, Sun J, Eisenstein J. Explainable prediction of medical codes from clinical text. NAACL 2018. <https://arxiv.org/abs/1802.05695>
+- Alsentzer E, et al. Publicly available clinical BERT embeddings. Clinical NLP Workshop 2019. <https://arxiv.org/abs/1904.03323>
+- Beltagy I, Peters ME, Cohan A. Longformer: The long-document transformer. 2020. <https://arxiv.org/abs/2004.05150>
+- Johnson A, et al. MIMIC-IV: A freely accessible electronic health record dataset. Scientific Data 2023.
+- Mitchell M, et al. Model Cards for Model Reporting. FAT* 2019.
+- Pushkarna M, et al. Data Cards: Purposeful and Transparent Dataset Documentation. FAccT 2022.

@@ -1,0 +1,75 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.eggs/
+build/
+dist/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Secrets / configs — CRITICAL
+# Block every per-user dev config (reveals local filesystem paths);
+# keep only the template and this block's exceptions.
+configs/dev.yml
+configs/dev.*.yml
+configs/prod.yml
+configs/prod.*.yml
+!configs/dev.example.yml
+.env
+*.pem
+*.key
+*.token
+
+# Data — CRITICAL, DUA COMPLIANCE
+# Never commit any real or sampled MIMIC data.
+*.csv
+*.csv.gz
+*.tsv
+*.parquet
+*.parquet.snappy
+*.pq
+*.feather
+*.zip
+*.gz
+/data/
+mimic-iv*/
+mimic_iv*/
+mlruns/
+checkpoints/
+models/*.bin
+models/*.pt
+models/*.safetensors
+
+# Whitelist synthetic test fixtures only (and they must be generated, not committed binary)
+!tests/fixtures/**/*.py
+
+# Notebooks — commit clean only
+.ipynb_checkpoints/
+# Uncomment next line if you want to keep outputs stripped on commit
+# *.ipynb
+
+# Quarto
+_site/
+.quarto/
+reports/*.html
+
+# Databricks
+.databricks/
+*.dbc
+
+# Logs — defensive; no log files are created by this project today, but a
+# redirected stdout capture (e.g., `mic run-all > run.log 2>&1`) would land here.
+*.log
+logs/

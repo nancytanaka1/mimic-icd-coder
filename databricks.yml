@@ -1,0 +1,123 @@
+# Databricks Asset Bundle — mimic-icd-coder
+# Docs: https://docs.databricks.com/dev-tools/bundles/index.html
+#
+# Two targets:
+#   dev  — personal sandbox, single-user, runs on a small cluster
+#   prod — shared workspace, Unity Catalog-bound, GPU cluster for training
+
+bundle:
+  name: mimic-icd-coder
+
+variables:
+  catalog:
+    description: Unity Catalog catalog for Bronze/Silver/Gold
+    default: mimic_icd
+  notes_path:
+    description: ADLS Gen2 abfss URI for raw discharge.csv.gz
+    default: abfss://raw@<storage>.dfs.core.windows.net/mimic-iv-note/note/discharge.csv.gz
+  hosp_path:
+    description: ADLS Gen2 abfss URI for raw MIMIC-IV Hosp module
+    default: abfss://raw@<storage>.dfs.core.windows.net/mimic-iv/hosp/
+  git_branch:
+    description: Git branch for notebook / job source
+    default: main
+
+workspace:
+  host: https://adb-XXXXXXXXXXXXXXXX.XX.azuredatabricks.net
+
+targets:
+
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: https://adb-XXXXXXXXXXXXXXXX.XX.azuredatabricks.net
+    run_as:
+      user_name: ${workspace.current_user.userName}
+    variables:
+      catalog: mimic_icd_dev
+
+  prod:
+    mode: production
+    workspace:
+      host: https://adb-XXXXXXXXXXXXXXXX.XX.azuredatabricks.net
+    run_as:
+      service_principal_name: mimic-icd-sp
+    variables:
+      catalog: mimic_icd
+
+resources:
+
+  jobs:
+
+    ingest_bronze:
+      name: mimic-icd — Bronze ingest
+      tasks:
+        - task_key: bronze
+          spark_python_task:
+            python_file: ../jobs/bronze.py
+            parameters:
+              - "--catalog"
+              - "${var.catalog}"
+              - "--notes-path"
+              - "${var.notes_path}"
+              - "--hosp-path"
+              - "${var.hosp_path}"
+          job_cluster_key: small_cluster
+      job_clusters:
+        - job_cluster_key: small_cluster
+          new_cluster:
+            spark_version: 15.4.x-scala2.12
+            node_type_id: Standard_DS4_v2
+            num_workers: 2
+            spark_conf:
+              spark.databricks.delta.optimizeWrite.enabled: "true"
+              spark.databricks.delta.autoCompact.enabled: "true"
+
+    train_baseline:
+      name: mimic-icd — Baseline TF-IDF+LR
+      tasks:
+        - task_key: train
+          spark_python_task:
+            python_file: ../jobs/train_baseline.py
+            parameters:
+              - "--catalog"
+              - "${var.catalog}"
+          job_cluster_key: cpu_cluster
+      job_clusters:
+        - job_cluster_key: cpu_cluster
+          new_cluster:
+            spark_version: 15.4.x-cpu-ml-scala2.12
+            node_type_id: Standard_DS5_v2
+            num_workers: 2
+
+    train_transformer:
+      name: mimic-icd — Bio_ClinicalBERT fine-tune
+      tasks:
+        - task_key: train
+          spark_python_task:
+            python_file: ../jobs/train_transformer.py
+            parameters:
+              - "--catalog"
+              - "${var.catalog}"
+              - "--model"
+              - "emilyalsentzer/Bio_ClinicalBERT"
+              - "--max-length"
+              - "512"
+              - "--batch-size"
+              - "16"
+              - "--epochs"
+              - "3"
+          job_cluster_key: gpu_cluster
+      job_clusters:
+        - job_cluster_key: gpu_cluster
+          new_cluster:
+            spark_version: 15.4.x-gpu-ml-scala2.12
+            node_type_id: Standard_NC6s_v3    # 1x V100, 112 GB RAM
+            num_workers: 0                     # single-node
+            custom_tags:
+              project: mimic-icd-coder
+              owner: nancytanaka
+            spark_conf:
+              spark.master: "local[*, 4]"
+              spark.databricks.cluster.profile: singleNode

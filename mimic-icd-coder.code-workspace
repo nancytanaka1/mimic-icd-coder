@@ -1,0 +1,157 @@
+{
+  "folders": [
+    {
+      "name": "mimic-icd-coder",
+      "path": "."
+    }
+  ],
+  "settings": {
+    "python.defaultInterpreterPath": "${workspaceFolder:mimic-icd-coder}/.venv/Scripts/python.exe",
+    "python.terminal.activateEnvironment": true,
+    "python.analysis.typeCheckingMode": "strict",
+    "python.analysis.extraPaths": ["src"],
+    "python.analysis.autoImportCompletions": true,
+
+    "python.testing.pytestEnabled": true,
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestArgs": ["tests"],
+
+    "[python]": {
+      "editor.defaultFormatter": "ms-python.black-formatter",
+      "editor.formatOnSave": true,
+      "editor.codeActionsOnSave": {
+        "source.organizeImports": "explicit",
+        "source.fixAll": "explicit"
+      },
+      "editor.rulers": [100]
+    },
+    "black-formatter.args": ["--line-length=100"],
+    "ruff.lint.args": ["--config=pyproject.toml"],
+    "mypy-type-checker.args": ["--config-file=pyproject.toml"],
+
+    "jupyter.notebookFileRoot": "${workspaceFolder:mimic-icd-coder}",
+    "notebook.formatOnSave.enabled": true,
+    "notebook.output.textLineLimit": 200,
+
+    "files.exclude": {
+      "**/__pycache__": true,
+      "**/.pytest_cache": true,
+      "**/.mypy_cache": true,
+      "**/.ruff_cache": true,
+      "**/*.egg-info": true,
+      "**/.ipynb_checkpoints": true,
+      ".databricks": false
+    },
+    "files.watcherExclude": {
+      "**/.venv/**": true,
+      "**/data/**": true,
+      "**/mlruns/**": true,
+      "**/reports/**": true
+    },
+    "search.exclude": {
+      "**/.venv": true,
+      "**/data": true,
+      "**/mlruns": true,
+      "**/*.parquet": true,
+      "**/*.ipynb_checkpoints": true
+    },
+
+    "files.associations": {
+      "databricks.yml": "yaml",
+      "*.yml": "yaml"
+    },
+    "yaml.schemas": {
+      "https://raw.githubusercontent.com/databricks/cli/main/bundle/schema/jsonschema.json": [
+        "databricks.yml",
+        "resources/*.yml"
+      ]
+    },
+
+    "terminal.integrated.cwd": "${workspaceFolder:mimic-icd-coder}",
+    "git.ignoreLimitWarning": true
+  },
+  "extensions": {
+    "recommendations": [
+      "ms-python.python",
+      "ms-python.vscode-pylance",
+      "ms-python.black-formatter",
+      "charliermarsh.ruff",
+      "ms-python.mypy-type-checker",
+      "ms-toolsai.jupyter",
+      "ms-toolsai.jupyter-renderers",
+      "databricks.databricks",
+      "redhat.vscode-yaml",
+      "tamasfe.even-better-toml",
+      "github.vscode-github-actions",
+      "eamodio.gitlens"
+    ]
+  },
+  "launch": {
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "name": "Pytest: current file",
+        "type": "debugpy",
+        "request": "launch",
+        "module": "pytest",
+        "args": ["${file}", "-vv"],
+        "console": "integratedTerminal",
+        "justMyCode": false
+      },
+      {
+        "name": "CLI: mic-ingest",
+        "type": "debugpy",
+        "request": "launch",
+        "module": "mimic_icd_coder.cli",
+        "args": ["ingest", "--config", "configs/dev.nancy.yml"],
+        "console": "integratedTerminal",
+        "justMyCode": false
+      },
+      {
+        "name": "CLI: mic-train-baseline",
+        "type": "debugpy",
+        "request": "launch",
+        "module": "mimic_icd_coder.cli",
+        "args": ["train-baseline", "--config", "configs/dev.nancy.yml"],
+        "console": "integratedTerminal",
+        "justMyCode": false
+      }
+    ]
+  },
+  "tasks": {
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "test",
+        "type": "shell",
+        "command": "pytest",
+        "group": { "kind": "test", "isDefault": true },
+        "presentation": { "reveal": "always", "panel": "shared" }
+      },
+      {
+        "label": "lint: ruff",
+        "type": "shell",
+        "command": "ruff check src tests",
+        "problemMatcher": []
+      },
+      {
+        "label": "format: black",
+        "type": "shell",
+        "command": "black src tests",
+        "problemMatcher": []
+      },
+      {
+        "label": "typecheck: mypy",
+        "type": "shell",
+        "command": "mypy src",
+        "problemMatcher": []
+      },
+      {
+        "label": "databricks: validate bundle",
+        "type": "shell",
+        "command": "databricks bundle validate",
+        "problemMatcher": []
+      }
+    ]
+  }
+}

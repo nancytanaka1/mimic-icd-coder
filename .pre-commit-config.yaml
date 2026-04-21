@@ -1,0 +1,71 @@
+# Pre-commit hooks — enforced at commit time on every clone of this repo.
+#
+# First-time setup on a new machine:
+#     pip install -e ".[dev]"     # pulls pre-commit
+#     pre-commit install          # wires hooks into .git/hooks
+#
+# Run manually on all files:
+#     pre-commit run --all-files
+#
+# Order of hooks matters: nbstripout runs BEFORE phi-scan, so we
+# scan the stripped notebook (the version that will actually land in git),
+# not the working-copy version with outputs.
+
+default_stages: [pre-commit]
+
+repos:
+  # ---------------------------------------------------------------
+  # Generic safety net — data-protection critical for DUA compliance
+  # ---------------------------------------------------------------
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+        args: [--maxkb=2000]        # blocks stray .parquet / .csv / model artifacts
+                                    # (2 MB ceiling allows Word/PDF reports;
+                                    # MIMIC parquets are multi-MB and still caught)
+      - id: check-merge-conflict
+      - id: check-yaml
+        exclude: '^\.github/workflows/'   # yamllint doesn't love GHA syntax
+      - id: check-toml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+        exclude: '\.ipynb$'         # nbstripout handles notebook whitespace
+      - id: detect-private-key
+
+  # ---------------------------------------------------------------
+  # Notebook output stripping — runs BEFORE the PHI scanner
+  # ---------------------------------------------------------------
+  - repo: https://github.com/kynan/nbstripout
+    rev: 0.7.1
+    hooks:
+      - id: nbstripout
+
+  # ---------------------------------------------------------------
+  # Python lint + format
+  # ---------------------------------------------------------------
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.7.4
+    hooks:
+      - id: ruff
+        args: [--fix]
+        types: [python]
+
+  - repo: https://github.com/psf/black
+    rev: 24.10.0
+    hooks:
+      - id: black
+        language_version: python3.11
+        types: [python]
+
+  # ---------------------------------------------------------------
+  # Project-local hooks
+  # ---------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: phi-scan
+        name: PHI scan (notebook outputs)
+        entry: python scripts/check_notebook_phi.py
+        language: system
+        files: '\.ipynb$'
+        pass_filenames: false       # script discovers notebooks itself
