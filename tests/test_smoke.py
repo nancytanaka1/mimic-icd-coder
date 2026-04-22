@@ -80,6 +80,79 @@ def test_build_labels_end_to_end() -> None:
     assert coverage > 0.8, f"Top-k coverage {coverage:.2f} lower than expected"
 
 
+def test_build_labels_excludes_codes_absent_from_cohort() -> None:
+    """Regression test for the Z20.822-style cohort-support bug.
+
+    A code may be frequent in the full ICD-10 diagnoses pool but absent
+    from the trainable cohort (e.g., COVID-era admissions without notes
+    in MIMIC-IV-Note v2.2). Top-K must be computed from cohort-restricted
+    diagnoses so such codes never enter the label space as constant-zero
+    columns.
+    """
+    # Silver: two admissions (100, 101) belonging to patients 1 and 2.
+    silver = pd.DataFrame(
+        {
+            "subject_id": [1, 2],
+            "hadm_id": [100, 101],
+            "text": ["sample note one longer text", "sample note two longer text"],
+            "n_tokens": [5, 5],
+        }
+    )
+    # Diagnoses: cohort admissions (100, 101) have code A.
+    # Phantom admission 200 (not in the cohort) has many positives of code Z —
+    # which in the FULL pool outranks A and would become the top-1 label
+    # despite zero cohort support.
+    diagnoses = pd.DataFrame(
+        {
+            "hadm_id": [100, 101, 200, 200, 200, 200, 200],
+            "icd_code": ["A", "A", "Z", "Z", "Z", "Z", "Z"],
+            "icd_version": [10, 10, 10, 10, 10, 10, 10],
+        }
+    )
+
+    # Sanity: in the full pool, Z is top-1 (5 vs 2 for A).
+    from mimic_icd_coder.data.labels import filter_icd10
+    from mimic_icd_coder.data.labels import top_k_codes as topk_fn
+
+    d10_full = filter_icd10(diagnoses)
+    full_pool_top1 = topk_fn(d10_full, k=1)
+    assert full_pool_top1 == ["Z"], f"Sanity check failed: full pool top-1 = {full_pool_top1}"
+
+    # The cohort-aware build must pick A, not Z.
+    label_set = build_labels(silver, diagnoses, k=1)
+    assert label_set.labels == ["A"], (
+        f"Cohort-aware top-1 should be ['A'] (only code present in cohort), "
+        f"got {label_set.labels} — top-K is being computed from the full pool, not cohort"
+    )
+    # Both cohort admissions have code A → full positive coverage.
+    assert int(label_set.y.sum()) == 2
+
+
+def test_build_labels_cohort_restriction_logs_drop() -> None:
+    """The cohort restriction should measurably drop diagnosis rows when
+    the raw pool contains non-cohort admissions."""
+    silver = pd.DataFrame(
+        {
+            "subject_id": [1],
+            "hadm_id": [100],
+            "text": ["a" * 500],
+            "n_tokens": [1],
+        }
+    )
+    # 1 cohort row, 9 non-cohort rows
+    diagnoses = pd.DataFrame(
+        {
+            "hadm_id": [100] + [999] * 9,
+            "icd_code": ["A"] * 10,
+            "icd_version": [10] * 10,
+        }
+    )
+    label_set = build_labels(silver, diagnoses, k=1)
+    assert label_set.labels == ["A"]
+    # Only the single cohort row should contribute to the matrix
+    assert int(label_set.y.sum()) == 1
+
+
 def test_patient_split_disjoint() -> None:
     corpus = make_synthetic(n_patients=50, seed=3)
     silver = build_silver_notes(corpus["notes"], min_tokens=50)

@@ -256,7 +256,7 @@ Databricks Model Serving endpoint, GPU-backed.
 POST /serving-endpoints/mimic-icd-discharge/invocations
 {
   "dataframe_records": [
-    {"text": "Admission Date: ... Discharge Diagnosis: ..."}
+    {"text": "<discharge summary text>"}
   ]
 }
 

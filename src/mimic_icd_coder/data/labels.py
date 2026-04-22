@@ -111,6 +111,15 @@ def build_label_matrix(
 def build_labels(silver_notes: pd.DataFrame, diagnoses: pd.DataFrame, k: int) -> LabelSet:
     """End-to-end Gold label build.
 
+    Top-K selection is performed on the cohort-restricted diagnoses slice
+    (diagnoses intersected with ``silver_notes.hadm_id``), not on the full
+    ICD-10 pool. This prevents codes that are frequent in the raw Hosp
+    table but absent from the note cohort from entering the label space
+    and silently becoming constant-zero columns. The original paper-level
+    example is Z20.822 (COVID exposure): ranked 9th in the full v3.1
+    ICD-10 pool but with zero positives in the v2.2 note cohort because
+    MIMIC-IV-Note predates the COVID admission window.
+
     Args:
         silver_notes: Cleaned notes (must have ``hadm_id`` column).
         diagnoses: Raw diagnoses table (ICD-9 and ICD-10 mixed).
@@ -125,8 +134,19 @@ def build_labels(silver_notes: pd.DataFrame, diagnoses: pd.DataFrame, k: int) ->
     """
     d10 = filter_icd10(diagnoses)
     hadm_ids = silver_notes["hadm_id"].to_numpy()
-    labels = top_k_codes(d10, k)
-    y = build_label_matrix(d10, hadm_ids, labels)
+
+    # Cohort-restrict BEFORE top-K selection — see docstring for rationale.
+    cohort_hadm = set(hadm_ids.tolist())
+    d10_cohort = d10.loc[d10["hadm_id"].isin(cohort_hadm)].copy()
+    logger.info(
+        "labels.cohort_restricted",
+        full_icd10_rows=len(d10),
+        cohort_icd10_rows=len(d10_cohort),
+        dropped=len(d10) - len(d10_cohort),
+    )
+
+    labels = top_k_codes(d10_cohort, k)
+    y = build_label_matrix(d10_cohort, hadm_ids, labels)
 
     zero_label = (y.sum(axis=1) == 0).sum()
     if zero_label > 0.5 * y.shape[0]:
