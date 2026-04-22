@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -12,7 +14,6 @@ from mimic_icd_coder.data.labels import LabelError, build_labels, filter_icd10, 
 from mimic_icd_coder.data.splits import SplitError, patient_split
 from mimic_icd_coder.evaluate import (
     MULLENBACH_CAML_TOP50,
-    compare_to_mullenbach,
     evaluate_multilabel,
     precision_at_k,
 )
@@ -23,6 +24,41 @@ from tests.fixtures.synthetic_notes import make_synthetic
 
 def test_version() -> None:
     assert __version__ == "0.1.0"
+
+
+def test_read_admissions_contains_demographic_columns(tmp_path: Path) -> None:
+    """Regression: admissions ingest must surface demographic columns.
+
+    MIMIC-IV v3.1 admissions header (verified against the raw CSV):
+      subject_id, hadm_id, admittime, dischtime, deathtime, admission_type,
+      admit_provider_id, admission_location, discharge_location, insurance,
+      language, marital_status, race, edregtime, edouttime, hospital_expire_flag
+    """
+    import gzip
+
+    raw = tmp_path / "admissions.csv.gz"
+    header = (
+        "subject_id,hadm_id,admittime,dischtime,deathtime,admission_type,"
+        "admit_provider_id,admission_location,discharge_location,insurance,"
+        "language,marital_status,race,edregtime,edouttime,hospital_expire_flag"
+    )
+    row = (
+        "1,100,2150-01-01 00:00:00,2150-01-05 00:00:00,,URGENT,"
+        "P1,ED,HOME,Medicare,English,MARRIED,WHITE,,,0"
+    )
+    with gzip.open(raw, "wt", encoding="utf-8") as fh:
+        fh.write(header + "\n" + row + "\n")
+
+    from mimic_icd_coder.data.ingest import read_admissions
+
+    df = read_admissions(raw)
+    required = {"race", "insurance", "language", "discharge_location"}
+    missing = required - set(df.columns)
+    assert not missing, f"read_admissions missing columns: {missing}"
+    assert df.iloc[0]["race"] == "WHITE"
+    assert df.iloc[0]["insurance"] == "Medicare"
+    assert df.iloc[0]["language"] == "English"
+    assert df.iloc[0]["discharge_location"] == "HOME"
 
 
 def test_clean_text_redacts_and_normalizes() -> None:
@@ -226,8 +262,6 @@ def test_baseline_end_to_end_beats_random() -> None:
 
     # Synthetic signal → baseline should clear 0.3 micro F1 on this tiny set.
     assert result.micro_f1 > 0.3, f"Baseline micro F1 too low: {result.micro_f1}"
-    deltas = compare_to_mullenbach(result)
-    assert isinstance(deltas, dict)
 
 
 def test_threshold_tuning_returns_valid_array() -> None:

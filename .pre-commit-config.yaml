@@ -21,16 +21,17 @@ repos:
     rev: v5.0.0
     hooks:
       - id: check-added-large-files
-        args: [--maxkb=2000]        # blocks stray .parquet / .csv / model artifacts
-                                    # (2 MB ceiling allows Word/PDF reports;
-                                    # MIMIC parquets are multi-MB and still caught)
+        args: [--maxkb=2000]            # blocks stray .parquet / .csv / model artifacts
+                                        # (2 MB ceiling allows Word/PDF reports;
+                                        # MIMIC parquets are multi-MB and still caught)
       - id: check-merge-conflict
       - id: check-yaml
-        exclude: '^\.github/workflows/'   # yamllint doesn't love GHA syntax
+        exclude: '^\.github/workflows/' # yamllint doesn't love GHA syntax
       - id: check-toml
       - id: end-of-file-fixer
+        exclude: '\.py$'                # Ruff handles Python; prevents truncation issue
       - id: trailing-whitespace
-        exclude: '\.ipynb$'         # nbstripout handles notebook whitespace
+        exclude: '(\.ipynb|\.py)$'      # nbstripout + Ruff handle these
       - id: detect-private-key
 
   # ---------------------------------------------------------------
@@ -68,4 +69,4 @@ repos:
         entry: python scripts/check_notebook_phi.py
         language: system
         files: '\.ipynb$'
-        pass_filenames: false       # script discovers notebooks itself
+        pass_filenames: true

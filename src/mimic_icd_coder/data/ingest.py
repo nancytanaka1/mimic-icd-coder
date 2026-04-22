@@ -110,6 +110,10 @@ def read_admissions(path: str | Path) -> pd.DataFrame:
             "deathtime",
             "hospital_expire_flag",
             "admission_type",
+            "race",
+            "insurance",
+            "language",
+            "discharge_location",
         ],
     )
 
@@ -126,7 +130,7 @@ def read_d_icd_diagnoses(path: str | Path) -> pd.DataFrame:
     """Read MIMIC-IV Hosp ``d_icd_diagnoses.csv.gz`` — the ICD code dictionary.
 
     Expected columns: ``icd_code, icd_version, long_title``. Used downstream
-    to attach human-readable descriptions to predicted codes and for the
-    top-50 code table in the EDA / data card.
+    to attach human-readable descriptions to predicted codes and to build
+    the top-50 code table in the EDA appendix.
     """
     return _read_gz_csv(path, columns=["icd_code", "icd_version", "long_title"])
