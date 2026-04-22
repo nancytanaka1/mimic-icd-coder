@@ -29,8 +29,10 @@ repos:
         exclude: '^\.github/workflows/'   # yamllint doesn't love GHA syntax
       - id: check-toml
       - id: end-of-file-fixer
+      # Exclude Python files while debugging the truncation issue
+        exclude: '\.py$'              # Python whitespace is handled by Ruff
       - id: trailing-whitespace
-        exclude: '\.ipynb$'         # nbstripout handles notebook whitespace
+        exclude: '(\.ipynb|\.py)$'    # nbstripout + Ruff handle these
       - id: detect-private-key
 
   # ---------------------------------------------------------------

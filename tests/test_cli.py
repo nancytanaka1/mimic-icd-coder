@@ -113,5 +113,13 @@ def test_cli_help_lists_all_commands() -> None:
     runner = CliRunner()
     result = runner.invoke(cli, ["--help"])
     assert result.exit_code == 0
-    for cmd in ["ingest", "silver", "gold", "splits", "train-baseline", "evaluate-test", "run-all"]:
+    for cmd in [
+        "ingest",
+        "silver",
+        "gold",
+        "splits",
+        "train-baseline",
+        "evaluate-test",
+        "run-all",
+    ]:
         assert cmd in result.output

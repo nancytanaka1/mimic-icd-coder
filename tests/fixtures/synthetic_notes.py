@@ -163,6 +163,16 @@ def make_synthetic(
                     "deathtime": "",
                     "hospital_expire_flag": 0,
                     "admission_type": "URGENT",
+                    # Demographic columns added for feat/ingest-demographics regression.
+                    # Distributions here are arbitrary; only schema presence matters for CI.
+                    "race": rng.choice(
+                        ["WHITE", "BLACK/AFRICAN AMERICAN", "HISPANIC OR LATINO", "ASIAN"]
+                    ),
+                    "insurance": rng.choice(["Medicare", "Private", "Medicaid"]),
+                    "language": "English",
+                    "discharge_location": rng.choice(
+                        ["HOME", "SKILLED NURSING FACILITY", "HOSPICE"]
+                    ),
                 }
             )
 
