@@ -18,9 +18,9 @@ Template: Mitchell et al. 2019.
 
 ## Intended Use
 
-- **Primary use:** Portfolio demonstration of end-to-end clinical NLP and MLOps.
-- **Out of scope:** Clinical decision support, real-world coding workflows, any production health-system deployment.
-- **Users:** Data scientists, ML engineers, portfolio reviewers.
+- **Primary use:** Production-grade benchmark for clinical NLP ICD-10 auto-coding on MIMIC-IV, deployed as an Azure Databricks Model Serving endpoint for reproducible inference. Demonstrates the full MLOps lifecycle — feature engineering, model validation against a published benchmark (Mullenbach et al. 2018 CAML), Unity Catalog Model Registry, drift monitoring.
+- **Out of scope:** Clinical decision support, real-world coding workflows, any production health-system deployment. The MIMIC-IV license restricts use to research and benchmarking on credentialed PhysioNet data only.
+- **Users:** Data scientists and ML engineers evaluating production clinical NLP patterns; research teams benchmarking against this implementation on MIMIC-IV top-50 ICD-10.
 
 ## Training Data
 
