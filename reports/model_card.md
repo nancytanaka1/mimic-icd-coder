@@ -34,18 +34,20 @@ Cohort definition, composition, and limitations are documented in [`reports/data
 
 - **Test split:** Held-out 10% of patients, no overlap with train or val.
 - **Metrics:** Micro F1, Macro F1, P@5, P@8, per-label F1.
-- **Reference baseline:** Mullenbach et al. 2018 CAML on MIMIC-III top-50 ICD-9 (Micro F1 = 0.539, Macro F1 = 0.088, P@8 = 0.523).
+- **Reference baseline:** Mullenbach et al. 2018 CAML on MIMIC-III top-50 ICD-9 — Table 5 of the paper. Micro F1 = 0.614, Macro F1 = 0.532, P@5 = 0.609. P@8 is not reported for the top-50 setting.
 
 Full evaluation methodology and comparison caveats are in [`reports/eval_report.qmd`](eval_report.qmd).
 
 ## Performance
 
-| Metric | Target | Floor | Mullenbach 2018 | Result |
-|---|---|---|---|---|
-| Micro F1 | ≥ 0.70 | 0.55 | 0.539 | TBD |
-| Macro F1 | ≥ 0.55 | 0.40 | 0.088 | TBD |
-| P@5 | ≥ 0.70 | — | 0.609 | TBD |
-| P@8 | ≥ 0.65 | — | 0.523 | TBD |
+| Metric | Target | Floor | Mullenbach 2018 CAML (MIMIC-III top-50) | Target Δ vs. CAML | Result |
+|---|---|---|---|---|---|
+| Micro F1 | ≥ 0.70 | 0.55 | 0.614 | +0.086 | TBD |
+| Macro F1 | ≥ 0.55 | 0.40 | 0.532 | +0.018 | TBD |
+| P@5 | ≥ 0.70 | — | 0.609 | +0.091 | TBD |
+| P@8 | ≥ 0.65 | — | n/a (Mullenbach Table 5 reports P@5 only) | — | TBD |
+
+CAML values from Mullenbach et al. 2018 Table 5 (MIMIC-III, 50 labels). See [`src/mimic_icd_coder/evaluate.py::MULLENBACH_CAML_TOP50`](../src/mimic_icd_coder/evaluate.py) for the citation.
 
 ## Fairness Analysis
 

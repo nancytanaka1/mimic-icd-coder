@@ -47,12 +47,14 @@ Full rationale in [`DECISIONS.md`](../DECISIONS.md).
 
 ## Headline Metrics (Test Split)
 
-| Metric | Baseline (TF-IDF + LR) | Chunked Bio_ClinicalBERT | Mullenbach 2018 (MIMIC-III) | Target | Floor |
-|---|---|---|---|---|---|
-| Micro F1 | TBD | TBD | 0.539 | ≥ 0.70 | 0.55 |
-| Macro F1 | TBD | TBD | 0.088 | ≥ 0.55 | 0.40 |
-| P@5 | TBD | TBD | 0.609 | ≥ 0.70 | — |
-| P@8 | TBD | TBD | 0.523 | ≥ 0.65 | — |
+| Metric | Baseline (TF-IDF + LR) | Chunked Bio_ClinicalBERT | Mullenbach 2018 CAML (MIMIC-III top-50) | Target | Floor | Target Δ vs. CAML |
+|---|---|---|---|---|---|---|
+| Micro F1 | TBD | TBD | 0.614 | ≥ 0.70 | 0.55 | +0.086 |
+| Macro F1 | TBD | TBD | 0.532 | ≥ 0.55 | 0.40 | +0.018 |
+| P@5 | TBD | TBD | 0.609 | ≥ 0.70 | — | +0.091 |
+| P@8 | TBD | TBD | n/a (not reported for top-50) | ≥ 0.65 | — | — |
+
+CAML baseline values are from Mullenbach et al. 2018, Table 5 ("Results on MIMIC-III, 50 labels"), CAML row. P@8 is not reported in Table 5 (the top-50 setting); the paper's P@8 values (0.709 for MIMIC-III full, 0.523 for MIMIC-II full) are from different evaluation settings and are not used here. See [`src/mimic_icd_coder/evaluate.py::MULLENBACH_CAML_TOP50`](../src/mimic_icd_coder/evaluate.py) for the citation.
 
 ## Per-Label Error Analysis
 
