@@ -33,10 +33,14 @@ from mimic_icd_coder.pipeline import (
 )
 
 
-def _bootstrap(config_path: Path, artifacts_dir: str) -> tuple[AppConfig, Paths]:
+def _bootstrap(
+    config_path: Path,
+    artifacts_dir: str,
+    log_level: str | None = None,
+) -> tuple[AppConfig, Paths]:
     cfg = load_config(config_path)
     configure_logging(
-        level=cfg.logging.get("level", "INFO"),
+        level=log_level or cfg.logging.get("level", "INFO"),
         fmt=cfg.logging.get("format", "console"),
     )
     paths = Paths(root=Path(artifacts_dir))
@@ -59,6 +63,13 @@ ARTIFACTS_OPTION = click.option(
     default="./data",
     show_default=True,
     help="Directory for stage outputs (bronze/silver/gold/mlruns).",
+)
+
+LOG_LEVEL_OPTION = click.option(
+    "--log-level",
+    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"], case_sensitive=False),
+    default=None,
+    help="Override the config's logging level for this invocation.",
 )
 
 
@@ -110,9 +121,10 @@ def cmd_splits(config_path: Path, artifacts_dir: str) -> None:
 @cli.command("train-baseline")
 @CONFIG_OPTION
 @ARTIFACTS_OPTION
-def cmd_train_baseline(config_path: Path, artifacts_dir: str) -> None:
+@LOG_LEVEL_OPTION
+def cmd_train_baseline(config_path: Path, artifacts_dir: str, log_level: str | None) -> None:
     """Silver + Gold → trained TF-IDF + LR, val metrics logged to MLflow."""
-    cfg, paths = _bootstrap(config_path, artifacts_dir)
+    cfg, paths = _bootstrap(config_path, artifacts_dir, log_level=log_level)
     log = get_logger("cli")
     log.info("stage.train_baseline")
     metrics = run_train_baseline(cfg, paths)
@@ -122,9 +134,10 @@ def cmd_train_baseline(config_path: Path, artifacts_dir: str) -> None:
 @cli.command("evaluate-test")
 @CONFIG_OPTION
 @ARTIFACTS_OPTION
-def cmd_evaluate_test(config_path: Path, artifacts_dir: str) -> None:
+@LOG_LEVEL_OPTION
+def cmd_evaluate_test(config_path: Path, artifacts_dir: str, log_level: str | None) -> None:
     """Evaluate saved baseline on the held-out test split."""
-    cfg, paths = _bootstrap(config_path, artifacts_dir)
+    cfg, paths = _bootstrap(config_path, artifacts_dir, log_level=log_level)
     log = get_logger("cli")
     log.info("stage.evaluate_test")
     metrics = run_evaluate_test(cfg, paths)
