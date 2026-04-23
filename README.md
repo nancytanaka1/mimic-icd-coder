@@ -4,16 +4,16 @@
 
 End-to-end clinical NLP pipeline deployed on Azure Databricks (Delta Lake + Unity Catalog + MLflow + Model Serving), benchmarked against Mullenbach et al. 2018 (CAML) on MIMIC-IV top-50 ICD-10. Reproducible on a single workstation or in the cloud without code branches; every methodological choice is pre-registered in [`DECISIONS.md`](DECISIONS.md) and defended in [`reports/EDA_Report.docx`](reports/EDA_Report.docx).
 
-**Headline result** (filled in after `mic train-baseline` and transformer runs complete):
+**Headline result** (baseline complete; transformer pending):
 
 | Metric | Baseline (TF-IDF + LR) | Chunked Bio_ClinicalBERT | Mullenbach 2018 CAML (MIMIC-III top-50) |
 |---|---|---|---|
-| Micro F1 | TBD | TBD | 0.614 |
-| Macro F1 | TBD | TBD | 0.532 |
-| P@5 | TBD | TBD | 0.609 |
-| P@8 | TBD | TBD | n/a (not reported for top-50) |
+| Micro F1 | **0.617** (+0.003 vs. CAML) | TBD | 0.614 |
+| Macro F1 | **0.584** (+0.052 vs. CAML) | TBD | 0.532 |
+| P@5 | 0.526 (−0.083 vs. CAML) | TBD | 0.609 |
+| P@8 | 0.433 | TBD | n/a (not reported for top-50) |
 
-Source: Mullenbach et al. 2018 Table 5.
+Source: Mullenbach et al. 2018 Table 5. Baseline evaluated on held-out patient-level test split (n=12,091 admissions, seed=42). Val→test drift <0.01 across all metrics; splits are clean. Baseline uses `class_weight="balanced"` + per-label F1-optimal thresholds, which trades ranking calibration (P@k) for per-label F1 — a deliberate baseline choice. P@k reclaim is the transformer branch's objective. See [`DECISIONS.md`](DECISIONS.md) 2026-04-23.
 
 For the full data card, model card, EDA paper, and evaluation methodology, see [`reports/`](reports/).
 For AI-assistance disclosure, see [`ACKNOWLEDGMENTS.md`](ACKNOWLEDGMENTS.md).

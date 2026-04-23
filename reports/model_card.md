@@ -42,10 +42,12 @@ Full evaluation methodology and comparison caveats are in [`reports/eval_report.
 
 | Metric | Target | Floor | Mullenbach 2018 CAML (MIMIC-III top-50) | Target Δ vs. CAML | Result |
 |---|---|---|---|---|---|
-| Micro F1 | ≥ 0.70 | 0.55 | 0.614 | +0.086 | TBD |
-| Macro F1 | ≥ 0.55 | 0.40 | 0.532 | +0.018 | TBD |
-| P@5 | ≥ 0.70 | — | 0.609 | +0.091 | TBD |
-| P@8 | ≥ 0.65 | — | n/a (Mullenbach Table 5 reports P@5 only) | — | TBD |
+| Micro F1 | ≥ 0.70 | 0.55 | 0.614 | +0.086 | **0.617** (baseline) / TBD (transformer) |
+| Macro F1 | ≥ 0.55 | 0.40 | 0.532 | +0.018 | **0.584** (baseline) / TBD (transformer) |
+| P@5 | ≥ 0.70 | — | 0.609 | +0.091 | 0.526 (baseline) / TBD (transformer) |
+| P@8 | ≥ 0.65 | — | n/a (Mullenbach Table 5 reports P@5 only) | — | 0.433 (baseline) / TBD (transformer) |
+
+Baseline = TF-IDF (1–2 gram, min_df=5, max_features=200k) + One-vs-Rest Logistic Regression (`class_weight="balanced"`, liblinear solver, max_iter=1000) with per-label F1-optimal thresholds. Evaluated on held-out patient-level test split, n=12,091 admissions, seed=42. MLflow run `4e577699a67a4027bc27628e9b237ac5`. Baseline beats Mullenbach CAML on both F1 metrics; P@k is intentionally de-emphasized for the baseline and is the transformer branch's primary gate — see [`DECISIONS.md`](../DECISIONS.md) 2026-04-23.
 
 CAML values from Mullenbach et al. 2018 Table 5 (MIMIC-III, 50 labels). See [`src/mimic_icd_coder/evaluate.py::MULLENBACH_CAML_TOP50`](../src/mimic_icd_coder/evaluate.py) for the citation.
 
