@@ -226,8 +226,16 @@ def test_precision_at_k_rejects_out_of_range() -> None:
 
 
 def test_mullenbach_constants_present() -> None:
-    for key in ("micro_f1", "macro_f1", "p_at_5", "p_at_8"):
+    # Mullenbach 2018 Table 5 (MIMIC-III top-50) reports Micro F1, Macro F1,
+    # and P@5 for CAML. P@8 is NOT reported for the top-50 setting — only for
+    # full-codes tables — so it is deliberately omitted from the constant to
+    # avoid citing a wrong-setting baseline. See evaluate.py for rationale.
+    for key in ("micro_f1", "macro_f1", "p_at_5"):
         assert key in MULLENBACH_CAML_TOP50
+    assert "p_at_8" not in MULLENBACH_CAML_TOP50, (
+        "p_at_8 must stay out of MULLENBACH_CAML_TOP50 — Mullenbach Table 5 "
+        "does not report it for the top-50 setting"
+    )
 
 
 def test_baseline_end_to_end_beats_random() -> None:
