@@ -17,6 +17,7 @@ from mimic_icd_coder.evaluate import (
     evaluate_multilabel,
     precision_at_k,
 )
+from mimic_icd_coder.logging_utils import configure_logging, is_debug_enabled
 from mimic_icd_coder.models.baseline import fit_baseline
 from mimic_icd_coder.thresholds import tune_thresholds
 from tests.fixtures.synthetic_notes import make_synthetic
@@ -226,8 +227,16 @@ def test_precision_at_k_rejects_out_of_range() -> None:
 
 
 def test_mullenbach_constants_present() -> None:
-    for key in ("micro_f1", "macro_f1", "p_at_5", "p_at_8"):
+    # Mullenbach 2018 Table 5 (MIMIC-III top-50) reports Micro F1, Macro F1,
+    # and P@5 for CAML. P@8 is NOT reported for the top-50 setting — only for
+    # full-codes tables — so it is deliberately omitted from the constant to
+    # avoid citing a wrong-setting baseline. See evaluate.py for rationale.
+    for key in ("micro_f1", "macro_f1", "p_at_5"):
         assert key in MULLENBACH_CAML_TOP50
+    assert "p_at_8" not in MULLENBACH_CAML_TOP50, (
+        "p_at_8 must stay out of MULLENBACH_CAML_TOP50 — Mullenbach Table 5 "
+        "does not report it for the top-50 setting"
+    )
 
 
 def test_baseline_end_to_end_beats_random() -> None:
@@ -262,6 +271,52 @@ def test_baseline_end_to_end_beats_random() -> None:
 
     # Synthetic signal → baseline should clear 0.3 micro F1 on this tiny set.
     assert result.micro_f1 > 0.3, f"Baseline micro F1 too low: {result.micro_f1}"
+
+
+def test_fit_baseline_verbose_is_gated_by_debug_log_level() -> None:
+    """Contract: sklearn verbose knobs fire only when root logger is at DEBUG.
+
+    INFO mode should stay quiet (no per-iter liblinear spam, no per-label
+    joblib spam). DEBUG mode flips both verbose knobs on. This protects the
+    "--log-level DEBUG" UX — a reviewer reading INFO-mode logs shouldn't see
+    a wall of convergence output.
+    """
+    configure_logging(level="INFO")
+    assert is_debug_enabled() is False
+    # Fit with INFO — LogisticRegression.verbose should resolve to 0.
+    corpus = make_synthetic(n_patients=15, seed=11)
+    silver = build_silver_notes(corpus["notes"], min_tokens=50)
+    label_set = build_labels(silver, corpus["diagnoses_icd"], k=3)
+    model = fit_baseline(
+        silver["text"].tolist(),
+        label_set.y,
+        label_set.labels,
+        tfidf_ngram_range=(1, 1),
+        tfidf_min_df=1,
+        tfidf_max_features=500,
+        logreg_c=1.0,
+        logreg_class_weight=None,
+    )
+    # OvR wraps one LR per label; they all share the same verbose setting.
+    assert all(est.verbose == 0 for est in model.classifier.estimators_)
+
+    # Flip to DEBUG — verbose must now be on.
+    configure_logging(level="DEBUG")
+    assert is_debug_enabled() is True
+    model2 = fit_baseline(
+        silver["text"].tolist(),
+        label_set.y,
+        label_set.labels,
+        tfidf_ngram_range=(1, 1),
+        tfidf_min_df=1,
+        tfidf_max_features=500,
+        logreg_c=1.0,
+        logreg_class_weight=None,
+    )
+    assert all(est.verbose == 1 for est in model2.classifier.estimators_)
+
+    # Reset so downstream tests aren't stuck in DEBUG.
+    configure_logging(level="INFO")
 
 
 def test_threshold_tuning_returns_valid_array() -> None:

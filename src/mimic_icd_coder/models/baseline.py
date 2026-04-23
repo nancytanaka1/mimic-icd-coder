@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import joblib
 import numpy as np
@@ -18,7 +18,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.multiclass import OneVsRestClassifier
 from sklearn.pipeline import Pipeline
 
-from mimic_icd_coder.logging_utils import get_logger
+from mimic_icd_coder.logging_utils import get_logger, is_debug_enabled
 
 logger = get_logger(__name__)
 
@@ -41,7 +41,7 @@ class BaselineModel:
             Array of shape ``(len(texts), n_labels)``.
         """
         x = self.vectorizer.transform(texts)
-        return self.classifier.predict_proba(x)
+        return cast("np.ndarray", self.classifier.predict_proba(x))
 
     def save(self, path: str | Path) -> None:
         """Persist the model to disk via joblib.
@@ -79,7 +79,7 @@ def fit_baseline(
     logreg_c: float = 1.0,
     logreg_class_weight: str | None = "balanced",
     random_state: int = 42,
-    n_jobs: int = -1,
+    n_jobs: int = 1,
 ) -> BaselineModel:
     """Fit TF-IDF + OneVsRest LogisticRegression.
 
@@ -124,7 +124,22 @@ def fit_baseline(
         lowercase=True,
         strip_accents="unicode",
     )
+    logger.debug("baseline.tfidf.fit_transform_start", n_docs=len(train_texts))
     x_train = vectorizer.fit_transform(train_texts)
+    logger.info(
+        "baseline.tfidf.done",
+        vocab_size=len(vectorizer.vocabulary_),
+        x_shape=x_train.shape,
+        x_nnz=int(x_train.nnz),
+    )
+
+    # Debug mode turns on framework-native verbose output — liblinear's
+    # per-iteration convergence ("iter 1 act ... nnz ... cg ...") and joblib's
+    # per-label progress ("Done N out of 50, elapsed Xs, remaining Ys").
+    # INFO mode stays quiet: logs only the stage-boundary events above.
+    debug = is_debug_enabled()
+    lr_verbose = 1 if debug else 0
+    ovr_verbose = 10 if debug else 0
 
     base = LogisticRegression(
         C=logreg_c,
@@ -132,8 +147,15 @@ def fit_baseline(
         max_iter=1000,
         solver="liblinear",
         random_state=random_state,
+        verbose=lr_verbose,
     )
-    clf = OneVsRestClassifier(base, n_jobs=n_jobs)
+    # n_jobs=1 by default: joblib's multi-process backend memmaps sparse
+    # x_train / y_train as read-only, and liblinear's C writeback-cast then
+    # fails with "WRITEBACKIFCOPY base is read-only". Serial fit sidesteps
+    # the whole issue at a ~2-3x runtime cost. Override only with a solver
+    # that tolerates memmap input (e.g. saga).
+    clf = OneVsRestClassifier(base, n_jobs=n_jobs, verbose=ovr_verbose)
+    logger.info("baseline.classifier.fit_start", n_labels=len(labels), n_train=x_train.shape[0])
     clf.fit(x_train, y_train)
 
     logger.info("baseline.fit.done", vocab_size=len(vectorizer.vocabulary_))

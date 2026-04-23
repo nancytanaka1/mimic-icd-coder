@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import cast
 
 import numpy as np
 from scipy.sparse import csr_matrix, issparse
@@ -17,14 +18,23 @@ from mimic_icd_coder.logging_utils import get_logger
 
 logger = get_logger(__name__)
 
-# Published CAML (Mullenbach et al. 2018) top-50 numbers on MIMIC-III.
-# Source: Table 2 of https://arxiv.org/abs/1802.05695
-# Kept as sanity benchmark — not a promise on MIMIC-IV.
+# Published CAML baseline from Mullenbach et al. (2018),
+# "Explainable Prediction of Medical Codes from Clinical Text" (NAACL).
+# Table 5, "Results on MIMIC-III, 50 labels", CAML row (p. 1107).
+# https://arxiv.org/abs/1802.05695
+#
+# Table 5 does NOT report P@8 for the 50-label setting — only P@5 is tabled
+# for top-50. The 0.709 / 0.523 P@8 values that appear in the paper are
+# from Table 4 (MIMIC-III full codes) and Table 6 (MIMIC-II full codes)
+# respectively, neither of which is an apples-to-apples baseline for a
+# MIMIC-IV top-50 comparison. We deliberately omit p_at_8 here rather
+# than cite a wrong-setting number.
+#
+# Kept as sanity benchmark for MIMIC-IV top-50 — not a promise.
 MULLENBACH_CAML_TOP50 = {
-    "micro_f1": 0.539,
-    "macro_f1": 0.088,  # CAML macro is famously weak; beating this is easy.
-    "p_at_5": 0.609,
-    "p_at_8": 0.523,
+    "micro_f1": 0.614,  # Table 5, CAML Micro-F1
+    "macro_f1": 0.532,  # Table 5, CAML Macro-F1
+    "p_at_5": 0.609,  # Table 5, CAML P@5
 }
 
 
@@ -62,7 +72,7 @@ class EvalResult:
 
 def _to_dense(y: csr_matrix | np.ndarray) -> np.ndarray:
     if issparse(y):
-        return np.asarray(y.todense())
+        return np.asarray(cast("csr_matrix", y).todense())
     return np.asarray(y)
 
 
@@ -174,8 +184,10 @@ def compare_to_mullenbach(result: EvalResult) -> dict[str, float]:
         "micro_f1_delta": result.micro_f1 - MULLENBACH_CAML_TOP50["micro_f1"],
         "macro_f1_delta": result.macro_f1 - MULLENBACH_CAML_TOP50["macro_f1"],
     }
-    if 5 in result.precision_at_k:
+    if 5 in result.precision_at_k and "p_at_5" in MULLENBACH_CAML_TOP50:
         deltas["p_at_5_delta"] = result.precision_at_k[5] - MULLENBACH_CAML_TOP50["p_at_5"]
-    if 8 in result.precision_at_k:
+    # Mullenbach Table 5 does not report P@8 for the 50-label setting — no
+    # apples-to-apples baseline exists, so we deliberately skip the delta.
+    if 8 in result.precision_at_k and "p_at_8" in MULLENBACH_CAML_TOP50:
         deltas["p_at_8_delta"] = result.precision_at_k[8] - MULLENBACH_CAML_TOP50["p_at_8"]
     return deltas

@@ -18,9 +18,9 @@ Template: Mitchell et al. 2019.
 
 ## Intended Use
 
-- **Primary use:** Portfolio demonstration of end-to-end clinical NLP and MLOps.
-- **Out of scope:** Clinical decision support, real-world coding workflows, any production health-system deployment.
-- **Users:** Data scientists, ML engineers, portfolio reviewers.
+- **Primary use:** Production-grade benchmark for clinical NLP ICD-10 auto-coding on MIMIC-IV, deployed as an Azure Databricks Model Serving endpoint for reproducible inference. Demonstrates the full MLOps lifecycle — feature engineering, model validation against a published benchmark (Mullenbach et al. 2018 CAML), Unity Catalog Model Registry, drift monitoring.
+- **Out of scope:** Clinical decision support, real-world coding workflows, any production health-system deployment. The MIMIC-IV license restricts use to research and benchmarking on credentialed PhysioNet data only.
+- **Users:** Data scientists and ML engineers evaluating production clinical NLP patterns; research teams benchmarking against this implementation on MIMIC-IV top-50 ICD-10.
 
 ## Training Data
 
@@ -34,18 +34,22 @@ Cohort definition, composition, and limitations are documented in [`reports/data
 
 - **Test split:** Held-out 10% of patients, no overlap with train or val.
 - **Metrics:** Micro F1, Macro F1, P@5, P@8, per-label F1.
-- **Reference baseline:** Mullenbach et al. 2018 CAML on MIMIC-III top-50 ICD-9 (Micro F1 = 0.539, Macro F1 = 0.088, P@8 = 0.523).
+- **Reference baseline:** Mullenbach et al. 2018 CAML on MIMIC-III top-50 ICD-9 — Table 5 of the paper. Micro F1 = 0.614, Macro F1 = 0.532, P@5 = 0.609. P@8 is not reported for the top-50 setting.
 
 Full evaluation methodology and comparison caveats are in [`reports/eval_report.qmd`](eval_report.qmd).
 
 ## Performance
 
-| Metric | Target | Floor | Mullenbach 2018 | Result |
-|---|---|---|---|---|
-| Micro F1 | ≥ 0.70 | 0.55 | 0.539 | TBD |
-| Macro F1 | ≥ 0.55 | 0.40 | 0.088 | TBD |
-| P@5 | ≥ 0.70 | — | 0.609 | TBD |
-| P@8 | ≥ 0.65 | — | 0.523 | TBD |
+| Metric | Target | Floor | Mullenbach 2018 CAML (MIMIC-III top-50) | Target Δ vs. CAML | Result |
+|---|---|---|---|---|---|
+| Micro F1 | ≥ 0.70 | 0.55 | 0.614 | +0.086 | **0.617** (baseline) / TBD (transformer) |
+| Macro F1 | ≥ 0.55 | 0.40 | 0.532 | +0.018 | **0.584** (baseline) / TBD (transformer) |
+| P@5 | ≥ 0.70 | — | 0.609 | +0.091 | 0.526 (baseline) / TBD (transformer) |
+| P@8 | ≥ 0.65 | — | n/a (Mullenbach Table 5 reports P@5 only) | — | 0.433 (baseline) / TBD (transformer) |
+
+Baseline = TF-IDF (1–2 gram, min_df=5, max_features=200k) + One-vs-Rest Logistic Regression (`class_weight="balanced"`, liblinear solver, max_iter=1000) with per-label F1-optimal thresholds. Evaluated on held-out patient-level test split, n=12,091 admissions, seed=42. MLflow run `4e577699a67a4027bc27628e9b237ac5`. Baseline beats Mullenbach CAML on both F1 metrics; P@k is intentionally de-emphasized for the baseline and is the transformer branch's primary gate — see [`DECISIONS.md`](../DECISIONS.md) 2026-04-23.
+
+CAML values from Mullenbach et al. 2018 Table 5 (MIMIC-III, 50 labels). See [`src/mimic_icd_coder/evaluate.py::MULLENBACH_CAML_TOP50`](../src/mimic_icd_coder/evaluate.py) for the citation.
 
 ## Fairness Analysis
 

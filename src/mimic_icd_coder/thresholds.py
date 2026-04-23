@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 import numpy as np
 from scipy.sparse import csr_matrix, issparse
 from sklearn.metrics import precision_recall_curve
@@ -34,7 +36,9 @@ def tune_thresholds(
     if metric not in {"f1", "youden"}:
         raise ValueError(f"Unknown metric: {metric!r}")
 
-    y = np.asarray(y_true.todense()) if issparse(y_true) else np.asarray(y_true)
+    # issparse is a runtime guard but mypy doesn't narrow the union; cast in
+    # the sparse branch so .todense() resolves.
+    y = np.asarray(cast("csr_matrix", y_true).todense()) if issparse(y_true) else np.asarray(y_true)
     n_labels = y.shape[1]
     thresholds = np.full(n_labels, default_threshold, dtype=np.float32)
     tuned = 0

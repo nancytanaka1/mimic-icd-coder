@@ -13,6 +13,7 @@ and 2–5× faster than pandas' C engine on large files.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 import pandas as pd
 import pyarrow as pa
@@ -64,7 +65,7 @@ def _read_gz_csv(path: str | Path, columns: list[str] | None = None) -> pd.DataF
     except (OSError, pa.ArrowInvalid) as exc:
         raise IngestError(f"Failed to read {p}") from exc
 
-    df = table.to_pandas()
+    df = cast("pd.DataFrame", table.to_pandas())
     df.columns = [c.lower() for c in df.columns]
     logger.info("ingest.read", path=str(p), rows=len(df), cols=len(df.columns))
     return df

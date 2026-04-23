@@ -155,6 +155,30 @@ def run_gold(cfg: AppConfig, paths: Paths) -> None:
     logger.info("gold.start", k=cfg.cohort.top_k_labels)
     silver = pd.read_parquet(silver_path)
     dx = pd.read_parquet(bronze_dx)
+
+    # Restrict Silver to the modelable cohort (admissions with at least one
+    # ICD-10 diagnosis) per DECISIONS.md 2026-04-20 (ICD-10-only cohort).
+    # ICD-9-only admissions are dropped here rather than at Silver so that
+    # Silver remains a pure notes-cleaning stage independent of diagnoses.
+    # Overwrite silver/notes.parquet so the downstream alignment invariant
+    # len(silver) == labels.shape[0] holds in run_train_baseline.
+    dx_cohort_hadm = set(
+        dx.loc[dx["icd_version"] == cfg.cohort.icd_version, "hadm_id"].dropna().astype(int).tolist()
+    )
+    before_rows = len(silver)
+    silver = (
+        silver.loc[silver["hadm_id"].astype(int).isin(dx_cohort_hadm)].copy().reset_index(drop=True)
+    )
+    logger.info(
+        "gold.cohort_restricted",
+        silver_full=before_rows,
+        silver_cohort=len(silver),
+        dropped=before_rows - len(silver),
+        icd_version=cfg.cohort.icd_version,
+    )
+    silver.to_parquet(silver_path, index=False)
+    logger.info("gold.silver_rewritten", path=str(silver_path), rows=len(silver))
+
     label_set = build_labels(silver, dx, k=cfg.cohort.top_k_labels)
 
     save_npz(paths.gold / "labels.npz", label_set.y)

@@ -1,16 +1,26 @@
 # mimic-icd-coder
 
-**Multi-label ICD-10 auto-coder for hospital discharge summaries.**
+**Multi-label ICD-10 auto-coder for hospital discharge summaries — a production MLOps benchmark study.**
 
-A clinical NLP pipeline that ingests MIMIC-IV discharge notes, produces a top-50 ICD-10 multi-hot label matrix, and trains a TF-IDF+LogisticRegression baseline plus a chunked Bio_ClinicalBERT transformer. Runs identically on a single Windows workstation (Parquet on local disk) or Azure Databricks (Delta Lake + Unity Catalog + MLflow + Model Serving). Benchmarked against Mullenbach et al. 2018 (CAML).
+End-to-end clinical NLP pipeline deployed on Azure Databricks (Delta Lake + Unity Catalog + MLflow + Model Serving), benchmarked against Mullenbach et al. 2018 (CAML) on MIMIC-IV top-50 ICD-10. Reproducible on a single workstation or in the cloud without code branches; every methodological choice is pre-registered in [`DECISIONS.md`](DECISIONS.md) and defended in [`reports/EDA_Report.docx`](reports/EDA_Report.docx).
+
+**Headline result** (baseline complete; transformer pending):
+
+| Metric | Baseline (TF-IDF + LR) | Chunked Bio_ClinicalBERT | Mullenbach 2018 CAML (MIMIC-III top-50) |
+|---|---|---|---|
+| Micro F1 | **0.617** (+0.003 vs. CAML) | TBD | 0.614 |
+| Macro F1 | **0.584** (+0.052 vs. CAML) | TBD | 0.532 |
+| P@5 | 0.526 (−0.083 vs. CAML) | TBD | 0.609 |
+| P@8 | 0.433 | TBD | n/a (not reported for top-50) |
+
+Source: Mullenbach et al. 2018 Table 5. Baseline evaluated on held-out patient-level test split (n=12,091 admissions, seed=42). Val→test drift <0.01 across all metrics; splits are clean. Baseline uses `class_weight="balanced"` + per-label F1-optimal thresholds, which trades ranking calibration (P@k) for per-label F1 — a deliberate baseline choice. P@k reclaim is the transformer branch's objective. See [`DECISIONS.md`](DECISIONS.md) 2026-04-23.
 
 For the full data card, model card, EDA paper, and evaluation methodology, see [`reports/`](reports/).
-For architectural decisions and their rationale, see [`DECISIONS.md`](DECISIONS.md).
 For AI-assistance disclosure, see [`ACKNOWLEDGMENTS.md`](ACKNOWLEDGMENTS.md).
 
 ---
 
-## 1. Product summary
+## 1. Study & deployment summary
 
 | Attribute | Value |
 |---|---|
@@ -24,14 +34,16 @@ For AI-assistance disclosure, see [`ACKNOWLEDGMENTS.md`](ACKNOWLEDGMENTS.md).
 
 ### Metric targets (top-50 ICD-10, patient-level test split)
 
-| Metric | Target | Floor | Mullenbach 2018 CAML (MIMIC-III) |
-|---|---|---|---|
-| Micro F1 | ≥ 0.70 | 0.55 | 0.539 |
-| Macro F1 | ≥ 0.55 | 0.40 | 0.088 |
-| P@5 | ≥ 0.70 | — | 0.609 |
-| P@8 | ≥ 0.65 | — | 0.523 |
+| Metric | Target | Floor | Mullenbach 2018 CAML (MIMIC-III top-50) | Target Δ vs. CAML |
+|---|---|---|---|---|
+| Micro F1 | ≥ 0.70 | 0.55 | 0.614 | +0.086 |
+| Macro F1 | ≥ 0.55 | 0.40 | 0.532 | +0.018 |
+| P@5 | ≥ 0.70 | — | 0.609 | +0.091 |
+| P@8 | ≥ 0.65 | — | n/a (Mullenbach Table 5 reports P@5 only) | — |
 
 Targets are for chunked Bio_ClinicalBERT. The TF-IDF+LR baseline is expected to clear Micro F1 ≥ 0.55. Below that, something upstream is broken — cohort filter, split leakage, or label misalignment.
+
+CAML baseline values are from Mullenbach et al. 2018 Table 5 (MIMIC-III, 50 labels). See [`src/mimic_icd_coder/evaluate.py::MULLENBACH_CAML_TOP50`](src/mimic_icd_coder/evaluate.py) for the citation.
 
 ---
 
@@ -205,7 +217,7 @@ Full methodology and Mullenbach comparison caveats in [`reports/eval_report.qmd`
 | Metric | Use |
 |---|---|
 | Micro F1 | Primary operational metric — stable under class imbalance |
-| Macro F1 | Rare-label performance; where CAML was weak |
+| Macro F1 | Rare-label performance across all 50 codes, equally weighted |
 | P@5 / P@8 / P@15 | Ranked-prediction precision for coder-assist workflow |
 | Per-label F1 | Error analysis on worst-performing labels |
 

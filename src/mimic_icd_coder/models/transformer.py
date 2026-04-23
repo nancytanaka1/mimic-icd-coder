@@ -78,6 +78,16 @@ def fine_tune(
         - MLflow autolog for params and metrics
         - Save best checkpoint + tokenizer to ``output_dir``
 
+    Visibility contract (shared with ``baseline.fit_baseline``):
+        Call ``mimic_icd_coder.logging_utils.is_debug_enabled()`` and wire the
+        result into HuggingFace ``TrainingArguments``. When True, set
+        ``logging_strategy="steps"``, ``logging_steps=50``,
+        ``disable_tqdm=False``, and ``report_to=["mlflow"]`` so per-step loss
+        / grad-norm / LR stream to stdout and MLflow. When False, keep
+        ``logging_strategy="epoch"`` so INFO-mode logs stay at per-epoch
+        granularity. This matches the LR baseline's "DEBUG = inner loop
+        visible, INFO = stage boundaries only" contract.
+
     Args:
         train_texts / val_texts: Document lists.
         y_train / y_val: Dense multi-label targets, ``float32``.
