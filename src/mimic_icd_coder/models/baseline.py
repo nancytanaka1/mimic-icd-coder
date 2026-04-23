@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import joblib
 import numpy as np
@@ -41,7 +41,7 @@ class BaselineModel:
             Array of shape ``(len(texts), n_labels)``.
         """
         x = self.vectorizer.transform(texts)
-        return self.classifier.predict_proba(x)
+        return cast("np.ndarray", self.classifier.predict_proba(x))
 
     def save(self, path: str | Path) -> None:
         """Persist the model to disk via joblib.

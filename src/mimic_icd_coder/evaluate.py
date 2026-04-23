@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import cast
 
 import numpy as np
 from scipy.sparse import csr_matrix, issparse
@@ -71,7 +72,7 @@ class EvalResult:
 
 def _to_dense(y: csr_matrix | np.ndarray) -> np.ndarray:
     if issparse(y):
-        return np.asarray(y.todense())
+        return np.asarray(cast("csr_matrix", y).todense())
     return np.asarray(y)
 
 
