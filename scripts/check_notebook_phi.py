@@ -414,21 +414,38 @@ def _find_notebooks(scope: Path) -> list[Path]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument(
+        "paths",
+        type=Path,
+        nargs="*",
+        help=(
+            "Notebook files to scan (positional). Overrides --scope. Pre-commit "
+            "passes matched files this way."
+        ),
+    )
+    parser.add_argument(
         "--scope",
         type=Path,
         default=Path("."),
-        help="Directory or .ipynb file to scan (default: .)",
+        help="Directory or .ipynb file to scan (default: .) when no positional paths given.",
     )
     parser.add_argument(
         "--verbose", action="store_true", help="Print OK lines for clean notebooks."
     )
     args = parser.parse_args()
 
-    if not args.scope.exists():
-        print(f"scope not found: {args.scope}", file=sys.stderr)
-        return 2
-
-    notebooks = _find_notebooks(args.scope)
+    # Positional paths (pre-commit's idiom) take precedence; --scope is the
+    # fallback for direct invocation without args.
+    if args.paths:
+        missing = [p for p in args.paths if not p.exists()]
+        if missing:
+            print(f"paths not found: {missing}", file=sys.stderr)
+            return 2
+        notebooks = sorted(p for p in args.paths if p.suffix == ".ipynb")
+    else:
+        if not args.scope.exists():
+            print(f"scope not found: {args.scope}", file=sys.stderr)
+            return 2
+        notebooks = _find_notebooks(args.scope)
     if not notebooks:
         print(f"no notebooks found under {args.scope}; nothing to scan.")
         return 0
