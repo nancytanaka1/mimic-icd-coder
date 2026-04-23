@@ -1,16 +1,23 @@
 # mimic-icd-coder
 
-**Multi-label ICD-10 auto-coder for hospital discharge summaries.**
+**Multi-label ICD-10 auto-coder for hospital discharge summaries — a production MLOps benchmark study.**
 
-A clinical NLP pipeline that ingests MIMIC-IV discharge notes, produces a top-50 ICD-10 multi-hot label matrix, and trains a TF-IDF+LogisticRegression baseline plus a chunked Bio_ClinicalBERT transformer. Runs identically on a single Windows workstation (Parquet on local disk) or Azure Databricks (Delta Lake + Unity Catalog + MLflow + Model Serving). Benchmarked against Mullenbach et al. 2018 (CAML).
+End-to-end clinical NLP pipeline deployed on Azure Databricks (Delta Lake + Unity Catalog + MLflow + Model Serving), benchmarked against Mullenbach et al. 2018 (CAML) on MIMIC-IV top-50 ICD-10. Reproducible on a single workstation or in the cloud without code branches; every methodological choice is pre-registered in [`DECISIONS.md`](DECISIONS.md) and defended in [`reports/EDA_Report.docx`](reports/EDA_Report.docx).
+
+**Headline result** (filled in after `mic train-baseline` and transformer runs complete):
+
+| Metric | Baseline (TF-IDF + LR) | Chunked Bio_ClinicalBERT | Mullenbach 2018 CAML (MIMIC-III) |
+|---|---|---|---|
+| Micro F1 | TBD | TBD | 0.539 |
+| Macro F1 | TBD | TBD | 0.088 |
+| P@8 | TBD | TBD | 0.523 |
 
 For the full data card, model card, EDA paper, and evaluation methodology, see [`reports/`](reports/).
-For architectural decisions and their rationale, see [`DECISIONS.md`](DECISIONS.md).
 For AI-assistance disclosure, see [`ACKNOWLEDGMENTS.md`](ACKNOWLEDGMENTS.md).
 
 ---
 
-## 1. Product summary
+## 1. Study & deployment summary
 
 | Attribute | Value |
 |---|---|

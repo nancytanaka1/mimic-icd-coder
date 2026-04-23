@@ -9,11 +9,12 @@ Format: `[Decision]: [What was chosen] — [Why] — [Alternatives considered]`
 - **What:** Predict the 50 most frequent ICD-10 codes in the MIMIC-IV Hosp diagnoses table.
 - **Why:** Published benchmark (Mullenbach et al. 2018) used top-50 on MIMIC-III. Direct comparability; keeps the label space tractable for BERT fine-tuning.
 - **Alternatives:** All ~18K ICD-10 codes (intractable), top-10 (too easy), disease-category roll-up (less useful clinically).
+- **Update 2026-04-22:** Cohort-aware top-50 verified after `mic gold`. `Z20.822` (COVID exposure, post-hoc, insufficient cohort support in MIMIC-IV-Note v2.2 window) dropped; `N18.3`, `J18.9`, `Y92.239`, `Z23` added in its place. Final cohort 122,283 admissions; `data/gold/label_names.json` confirmed.
 
 ## 2026-04-20 — Patient-level train/val/test split
 - **What:** Partition by `subject_id`, not by `hadm_id`. 80/10/10 stratified by label presence.
 - **Why:** Admission-level splits leak patient-specific language patterns (writing style, comorbidity clusters) across train/test and inflate metrics.
-- **Alternatives:** Temporal split by admit date. Rejected for portfolio — reviewer expectation is patient-level. Could add as a secondary eval.
+- **Alternatives:** Temporal split by admit date. Rejected for this study — patient-level is the methodologically standard choice for clinical NLP benchmarks; temporal split could be added as a secondary evaluation.
 
 ## 2026-04-20 — Use MIMIC-IV v3.1 labels joined to MIMIC-IV-Note v2.2 notes
 - **What:** Labels from `hosp/diagnoses_icd.csv.gz` (v3.1, Oct 2024); notes from `note/discharge.csv.gz` (v2.2, Jan 2023).
