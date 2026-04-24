@@ -4,6 +4,8 @@
 
 End-to-end clinical NLP pipeline deployed on Azure Databricks (Delta Lake + Unity Catalog + MLflow + Model Serving), benchmarked against Mullenbach et al. 2018 (CAML) on MIMIC-IV top-50 ICD-10. Reproducible on a single workstation or in the cloud without code branches; every methodological choice is pre-registered in [`DECISIONS.md`](DECISIONS.md) and defended in [`reports/EDA_Report.docx`](reports/EDA_Report.docx).
 
+**Purpose and compliance posture.** Research benchmark replication of Mullenbach 2018 (CAML) on MIMIC-IV ICD-10 auto-coding, plus MLOps methodology demonstration for credentialed clinical NLP. Scientific-research use only under the [PhysioNet Credentialed Health Data License v1.5.0](https://physionet.org/content/mimiciv/view-license/3.1/) — not a clinical product, not a commercial service, not for real-world patient care. No MIMIC data or trained weights are redistributed through this repository; only aggregate research results (metrics, methodology, code, synthetic examples) are published here. Reproduction requires independent PhysioNet credentialing and CITI training.
+
 **Headline result** (baseline complete; transformer pending):
 
 | Metric | Baseline (TF-IDF + LR) | Chunked Bio_ClinicalBERT | Mullenbach 2018 CAML (MIMIC-III top-50) |
@@ -341,6 +343,9 @@ Template: [`configs/dev.example.yml`](configs/dev.example.yml). User overrides g
 
 Full details in [`reports/data_card.md`](reports/data_card.md). Headlines:
 
+- **Scientific-research use only** under the PhysioNet Credentialed Health Data License v1.5.0. This repository replicates a published benchmark (Mullenbach 2018) and demonstrates MLOps methodology for clinical NLP. It is not a clinical product, commercial service, decision-support tool, or clinical-care application. Trained model weights are scoped to this research purpose and are not redistributed.
+- **Re-identification.** No attempt to identify patients or institutions is made. Only aggregate cohort statistics, label-level metrics, and synthetic examples are published; no note text, admission IDs, or subject IDs leave local disk.
+- **Credentialing.** Reproducing results from raw data requires the reviewer to independently complete PhysioNet credentialing (CITI training + DUA agreement) before accessing MIMIC-IV. This repository does not grant any access to the underlying data.
 - MIMIC-IV data is credentialed under the PhysioNet Health Data License v1.5.0.
 - `.gitignore` blocks CSV, Parquet, gz, npz, joblib, and user-specific configs. No raw data enters this repository.
 - Training runs in the user's own Azure tenant (single-tenant Databricks workspace, private ADLS Gen2).
