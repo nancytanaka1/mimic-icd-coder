@@ -19,6 +19,7 @@ from mimic_icd_coder.evaluate import (
 )
 from mimic_icd_coder.logging_utils import configure_logging, is_debug_enabled
 from mimic_icd_coder.models.baseline import fit_baseline
+from mimic_icd_coder.models.transformer import tokenize_and_chunk
 from mimic_icd_coder.thresholds import tune_thresholds
 from tests.fixtures.synthetic_notes import make_synthetic
 
@@ -317,6 +318,74 @@ def test_fit_baseline_verbose_is_gated_by_debug_log_level() -> None:
 
     # Reset so downstream tests aren't stuck in DEBUG.
     configure_logging(level="INFO")
+
+
+def test_tokenize_and_chunk_preserves_doc_idx_and_shapes() -> None:
+    """A long note should split into multiple chunks; each chunk keeps its
+    parent ``doc_idx`` and chunk lengths stay within ``max_length``.
+
+    Uses ``distilbert-base-uncased`` as a small, universally-cached
+    tokenizer so the test runs quickly in CI without downloading the
+    ~440 MB Bio_ClinicalBERT model weights (the production tokenizer is
+    API-compatible with this one — identical chunking semantics).
+    """
+    from transformers import AutoTokenizer
+
+    tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+
+    # Doc 0: long enough that a 64-token window needs multiple chunks.
+    # Doc 1: short, single-chunk.
+    long_text = "patient presents with acute onset chest pain and dyspnea " * 20
+    short_text = "brief stable patient"
+
+    chunks = tokenize_and_chunk([long_text, short_text], tokenizer, max_length=64, stride=16)
+
+    # Multiple chunks from doc 0, exactly one from doc 1.
+    doc0_chunks = [c for c in chunks if c["doc_idx"] == 0]
+    doc1_chunks = [c for c in chunks if c["doc_idx"] == 1]
+    assert len(doc0_chunks) >= 2, f"long doc should split; got {len(doc0_chunks)}"
+    assert len(doc1_chunks) == 1, f"short doc should stay single; got {len(doc1_chunks)}"
+
+    # Every chunk respects max_length and has aligned masks.
+    for c in chunks:
+        assert len(c["input_ids"]) <= 64
+        assert len(c["input_ids"]) == len(c["attention_mask"])
+        assert all(tok in (0, 1) for tok in c["attention_mask"])
+
+    # Ordering invariant: all doc 0 chunks come before doc 1's.
+    doc_indices = [c["doc_idx"] for c in chunks]
+    assert doc_indices == sorted(doc_indices), "doc order must be stable across chunks"
+
+
+def test_tokenize_and_chunk_handles_empty_input() -> None:
+    """An empty list is a valid input and should produce zero chunks."""
+    from transformers import AutoTokenizer
+
+    tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+    assert tokenize_and_chunk([], tokenizer, max_length=64, stride=16) == []
+
+
+def test_tokenize_and_chunk_stride_increases_chunk_count() -> None:
+    """Sliding-window (stride > 0) must produce at least as many chunks as
+    contiguous (stride = 0) on the same input. This is the correctness
+    check for the stride parameter — positional overlap is hard to verify
+    with a repeating-vocab test, but the chunk-count monotonicity is
+    deterministic and matches the sliding-window contract.
+    """
+    from transformers import AutoTokenizer
+
+    tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+
+    long_text = "patient presents with acute onset chest pain and dyspnea " * 20
+
+    contiguous = tokenize_and_chunk([long_text], tokenizer, max_length=32, stride=0)
+    sliding = tokenize_and_chunk([long_text], tokenizer, max_length=32, stride=8)
+
+    assert len(contiguous) >= 2, "long doc with small window must chunk multiple times"
+    assert len(sliding) >= len(contiguous), (
+        f"stride=8 must produce at least as many chunks as stride=0; "
+        f"got sliding={len(sliding)}, contiguous={len(contiguous)}"
+    )
 
 
 def test_threshold_tuning_returns_valid_array() -> None:

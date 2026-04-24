@@ -55,6 +55,11 @@ dev = [
     "types-PyYAML",
     "ipykernel>=6.29",
     "pre-commit>=3.7",
+    # Transformer-code phase: tokenize_and_chunk needs the HuggingFace
+    # tokenizer, but not torch. torch + accelerate + datasets + evaluate
+    # are in the separate [transformer] extra for the fine_tune and
+    # predict phases.
+    "transformers>=4.40",
 ]
 
 [project.scripts]
