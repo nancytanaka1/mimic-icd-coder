@@ -63,7 +63,7 @@ Any subgroup disparity of 5 percentage points or more is flagged for explicit di
 
 **Deferred analyses:**
 
-- **Race and ethnicity** — not in the current Bronze schema; requires schema extension before inclusion.
+- **Race** — ingested into Bronze `admissions` per `feat/ingest-demographic`; not yet flowed through to Silver/Gold, so stratified fairness metrics are not computed. The slicing pass is future work. **Ethnicity** is not separately represented — MIMIC-IV's `race` column conflates race and ethnicity; disaggregation would require further work. Race is held strictly for future evaluation-time cohort stratification; it is **not** used as a prediction feature.
 - **Temporal era** — requires Silver-stage date un-shifting before admissions can be grouped by real calendar year. See [`DECISIONS.md`](../DECISIONS.md) entry dated 2026-04-21.
 
 ## Ethical Considerations

@@ -72,7 +72,7 @@ Macro F1 reported by:
 - **Age bucket** (18-29, 30-44, 45-54, 55-64, 65-74, 75-84, 85+) with the caveat that `anchor_age` is capped at 89
 - **Admission frequency** (single-admit vs. 5+ admits)
 
-Temporal fairness deferred pending Silver-stage date un-shifting. Race- and ethnicity-stratified analysis deferred pending Bronze schema extension. See [`DECISIONS.md`](../DECISIONS.md) 2026-04-21.
+Temporal fairness deferred pending Silver-stage date un-shifting. Race-stratified analysis is deferred pending Silver/Gold integration of the demographic columns — race is already ingested to Bronze (per `feat/ingest-demographic`), but the fairness slicing pass has not been implemented. See [`DECISIONS.md`](../DECISIONS.md) 2026-04-21.
 
 # Comparison to Mullenbach 2018
 
