@@ -285,11 +285,169 @@ def fine_tune(
 
     trainer.save_model(str(output_path))
     tokenizer.save_pretrained(str(output_path))
-    logger.info("transformer.fine_tune.saved", path=str(output_path))
+    # Save the label list alongside the model so load_fine_tuned can recover
+    # human-readable code names. HuggingFace's id2label/label2id on the model
+    # config works for simple cases but round-trips through strings and is
+    # easy to desync; a sibling labels.json is explicit and obvious.
+    import json as _json
+
+    (output_path / "labels.json").write_text(_json.dumps(list(labels), indent=2), encoding="utf-8")
+    logger.info("transformer.fine_tune.saved", path=str(output_path), n_labels=n_labels)
 
     return output_path
 
 
-def load_fine_tuned(model_dir: str | Path) -> object:
-    """Load a fine-tuned model for inference."""
-    raise NotImplementedError("Pending on feat/transformer-finetune")
+@dataclass
+class FineTunedModel:
+    """Loaded fine-tuned transformer — tokenizer + model + labels + chunking config.
+
+    Chunk-pool inference contract (per ``DECISIONS.md`` 2026-04-20
+    chunk-and-max-pool): ``predict_proba`` tokenizes each note into
+    ``max_length``-token chunks with ``stride`` overlap, forward-passes each
+    chunk independently, applies sigmoid to the logits, and then max-pools
+    across every chunk that shares a parent ``doc_idx``. Rationale for
+    max-pool (vs. mean): any single chunk asserting "this code is present"
+    is sufficient evidence; mean-pool dilutes the signal when only one
+    chunk contains the relevant clinical mention.
+
+    Attributes:
+        tokenizer: HuggingFace tokenizer loaded from the saved model dir.
+        model: HuggingFace model in eval mode.
+        labels: Ordered list of ICD-10 codes — column order of the output.
+        max_length: Chunk window length (must match training).
+        stride: Sliding-window overlap (must match training).
+    """
+
+    tokenizer: Any
+    model: Any
+    labels: list[str]
+    max_length: int = 512
+    stride: int = 128
+
+    def predict_proba(self, texts: list[str], batch_size: int = 8) -> np.ndarray:
+        """Predict per-label probabilities with chunk max-pool aggregation.
+
+        Args:
+            texts: Documents to score. One string per note.
+            batch_size: Chunks per forward pass. Independent of the training
+                batch size. Lower this if inference OOMs on GPU.
+
+        Returns:
+            Array shape ``(len(texts), len(self.labels))`` of sigmoid
+            probabilities in ``[0, 1]``, max-pooled across chunks per doc.
+            Rows of all-zeros are only possible when ``texts`` is empty
+            — any non-empty note produces at least one chunk.
+        """
+        import torch
+
+        if not texts:
+            return np.zeros((0, len(self.labels)), dtype=np.float32)
+
+        chunks = tokenize_and_chunk(
+            texts, self.tokenizer, max_length=self.max_length, stride=self.stride
+        )
+
+        device = next(self.model.parameters()).device
+        self.model.eval()
+
+        pad_token_id = self.tokenizer.pad_token_id or 0
+        chunk_probs_batches: list[np.ndarray] = []
+
+        with torch.no_grad():
+            for start in range(0, len(chunks), batch_size):
+                batch = chunks[start : start + batch_size]
+                max_len = max(len(c["input_ids"]) for c in batch)
+                input_ids = torch.tensor(
+                    [
+                        c["input_ids"] + [pad_token_id] * (max_len - len(c["input_ids"]))
+                        for c in batch
+                    ],
+                    dtype=torch.long,
+                    device=device,
+                )
+                attention_mask = torch.tensor(
+                    [
+                        c["attention_mask"] + [0] * (max_len - len(c["attention_mask"]))
+                        for c in batch
+                    ],
+                    dtype=torch.long,
+                    device=device,
+                )
+                logits = self.model(input_ids=input_ids, attention_mask=attention_mask).logits
+                probs = torch.sigmoid(logits).cpu().numpy()
+                chunk_probs_batches.append(probs)
+
+        chunk_probs = np.concatenate(chunk_probs_batches, axis=0).astype(np.float32)
+        doc_indices = np.array([c["doc_idx"] for c in chunks], dtype=np.int64)
+
+        doc_probs = np.zeros((len(texts), len(self.labels)), dtype=np.float32)
+        for doc_idx in range(len(texts)):
+            mask = doc_indices == doc_idx
+            if mask.any():
+                doc_probs[doc_idx] = chunk_probs[mask].max(axis=0)
+
+        logger.info(
+            "transformer.predict_proba",
+            n_docs=len(texts),
+            n_chunks=len(chunks),
+            n_labels=len(self.labels),
+        )
+        return doc_probs
+
+
+def load_fine_tuned(
+    model_dir: str | Path, *, max_length: int = 512, stride: int = 128
+) -> FineTunedModel:
+    """Load a fine-tuned model and its tokenizer from disk for inference.
+
+    Args:
+        model_dir: Directory written by ``fine_tune`` — contains the model
+            weights, the tokenizer, and a ``labels.json`` sidecar.
+        max_length: Chunk window length for inference. Match the value
+            used during training; the 512 default matches
+            ``TransformerTrainConfig.max_length``.
+        stride: Sliding-window overlap for inference. Match training.
+
+    Returns:
+        A ``FineTunedModel`` wrapper with ``predict_proba`` bound and
+        ready to call.
+    """
+    import json as _json
+
+    from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
+    model_path = Path(model_dir)
+    if not model_path.is_dir():
+        raise FileNotFoundError(f"Model directory not found: {model_path}")
+
+    tokenizer = AutoTokenizer.from_pretrained(str(model_path))
+    model = AutoModelForSequenceClassification.from_pretrained(str(model_path))
+
+    labels_path = model_path / "labels.json"
+    if labels_path.is_file():
+        labels = list(_json.loads(labels_path.read_text(encoding="utf-8")))
+    else:
+        # Older training runs that predate the labels.json sidecar fall
+        # back to synthetic "LABEL_N" names sized to the classifier head.
+        n_labels = int(getattr(model.config, "num_labels", 0))
+        labels = [f"LABEL_{i}" for i in range(n_labels)]
+        logger.warning(
+            "transformer.load_fine_tuned.no_labels_json",
+            path=str(labels_path),
+            fallback_n_labels=n_labels,
+        )
+
+    logger.info(
+        "transformer.load_fine_tuned",
+        model_dir=str(model_path),
+        n_labels=len(labels),
+        max_length=max_length,
+        stride=stride,
+    )
+    return FineTunedModel(
+        tokenizer=tokenizer,
+        model=model,
+        labels=labels,
+        max_length=max_length,
+        stride=stride,
+    )
