@@ -15,6 +15,8 @@ End-to-end clinical NLP pipeline deployed on Azure Databricks (Delta Lake + Unit
 
 Source: Mullenbach et al. 2018 Table 5. Baseline evaluated on held-out patient-level test split (n=12,091 admissions, seed=42). Val→test drift <0.01 across all metrics; splits are clean. Baseline uses `class_weight="balanced"` + per-label F1-optimal thresholds, which trades ranking calibration (P@k) for per-label F1 — a deliberate baseline choice. P@k reclaim is the transformer branch's objective. See [`DECISIONS.md`](DECISIONS.md) 2026-04-23.
 
+**Reproducibility.** `mic run-all --config configs/dev.nancy.yml` on fresh MIMIC-IV v3.1 Hosp + MIMIC-IV-Note v2.2 raw CSVs reproduces every headline metric to **15+ decimal places** (verified 2026-04-24, MLflow run `6e809d5dfd3b46dbafae84ddba710bd7`). Reproducibility comes from a fixed patient-split seed (42), a deterministic liblinear solver, and file-on-disk stage boundaries that make each step independently re-runnable. A reviewer with PhysioNet credentials cloning this repo will get identical numbers end-to-end.
+
 For the full data card, model card, EDA paper, and evaluation methodology, see [`reports/`](reports/).
 For AI-assistance disclosure, see [`ACKNOWLEDGMENTS.md`](ACKNOWLEDGMENTS.md).
 
