@@ -3,6 +3,17 @@
 Record every non-obvious architectural or methodological choice.
 Format: `[Decision]: [What was chosen] — [Why] — [Alternatives considered]`
 
+## Index
+
+- **2026-04-20** — Target top-50 ICD-10 codes
+- **2026-04-20** — Patient-level train/val/test split
+- **2026-04-20** — Use MIMIC-IV v3.1 labels joined to MIMIC-IV-Note v2.2 notes
+- **2026-04-20** — ICD-10-only cohort
+- **2026-04-20** — Bio_ClinicalBERT as primary model family; Clinical-Longformer as fallback
+- **2026-04-20** — Chunk-and-max-pool over full notes; Longformer deferred
+- **2026-04-21** — Defer date un-shifting to Silver; EDA chart flagged as diagnostic-only
+- **2026-04-23** — TF-IDF + LR baseline ships on the F1 story; P@k floor lowered to informational
+
 ---
 
 ## 2026-04-20 — Target top-50 ICD-10 codes
