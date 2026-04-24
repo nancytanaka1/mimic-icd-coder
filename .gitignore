@@ -18,6 +18,8 @@ htmlcov/
 .idea/
 *.swp
 .DS_Store
+*.code-workspace
+.claude/
 
 # Secrets / configs — CRITICAL
 # Block every per-user dev config (reveals local filesystem paths);

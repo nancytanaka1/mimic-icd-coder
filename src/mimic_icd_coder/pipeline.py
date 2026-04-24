@@ -1,8 +1,18 @@
-"""Pipeline orchestration — stage-by-stage functions with Parquet checkpoints.
+"""Pipeline orchestration — one function per stage, connected by files on disk.
 
-Each stage reads from the previous stage's artifacts on disk, runs its
-transform, and writes Parquet / npz / json outputs for the next stage
-to consume. This lets you iterate on one stage without recomputing upstream.
+The pipeline runs in four stages, in order: Bronze → Silver → Gold → splits.
+After those, two more stages train and evaluate the model. Each stage reads
+the previous stage's output files from disk, does its job, and saves its own
+output files. This is called a "medallion" layout.
+
+Why it's organized this way:
+    - You can re-run one stage without re-running everything upstream. If you
+      change the cleaning rules in Silver, you don't need to re-download or
+      re-read the raw CSVs — Bronze is still valid on disk.
+    - A reviewer can open any stage's output folder and see exactly what the
+      next stage will consume. No hidden state, no in-memory magic.
+    - Files are the contract between stages. If a file is missing, the stage
+      fails with a clear error telling you which earlier stage to run first.
 """
 
 from __future__ import annotations
@@ -37,7 +47,12 @@ class PipelineError(Exception):
 
 @dataclass(frozen=True)
 class Paths:
-    """Canonical on-disk layout for pipeline artifacts."""
+    """Where each stage reads from and writes to.
+
+    Given a ``root`` directory (usually ``./data``), this class gives you the
+    four sub-folders the pipeline uses — one per stage — so stage code never
+    hard-codes paths. ``ensure()`` creates any folders that don't exist yet.
+    """
 
     root: Path
 
@@ -58,7 +73,7 @@ class Paths:
         return self.root / "mlruns"
 
     def ensure(self) -> None:
-        """Create all stage directories."""
+        """Create any missing stage folders. Safe to call more than once."""
         for p in (self.bronze, self.silver, self.gold, self.mlruns):
             p.mkdir(parents=True, exist_ok=True)
 
@@ -68,13 +83,18 @@ class Paths:
 
 
 def run_bronze(cfg: AppConfig, paths: Paths) -> None:
-    """Read raw gz CSVs and mirror to Parquet under ``paths.bronze``.
+    """Stage 1 — copy the raw MIMIC gzipped CSVs into fast Parquet files.
 
-    Writes:
-        - ``discharge_notes.parquet``
-        - ``diagnoses_icd.parquet``
-        - ``admissions.parquet``
-        - ``patients.parquet``
+    This is the "landing zone" stage. We don't change the data here — we just
+    read the slow-to-parse CSVs once and save them as Parquet, which is much
+    faster to re-read in every later stage. Think of it as a cache step.
+
+    Writes these files under ``paths.bronze``:
+        - ``discharge_notes.parquet``  (one row per discharge summary)
+        - ``diagnoses_icd.parquet``    (one row per assigned ICD code)
+        - ``admissions.parquet``       (one row per hospital visit)
+        - ``patients.parquet``         (one row per patient)
+        - ``d_icd_diagnoses.parquet``  (optional — ICD code → description table)
     """
     paths.ensure()
     logger.info("bronze.start", out=str(paths.bronze))
@@ -110,10 +130,16 @@ def run_bronze(cfg: AppConfig, paths: Paths) -> None:
 
 
 def run_silver(cfg: AppConfig, paths: Paths) -> None:
-    """Read Bronze notes, produce cleaned Silver notes Parquet.
+    """Stage 2 — clean the discharge notes and drop ones that are too short.
 
-    Writes:
-        - ``silver/notes.parquet``
+    Takes the raw notes from Bronze and does three things:
+        1. Keeps only the note types we want (usually ``"DS"`` = discharge summary).
+        2. Removes duplicate admissions — only one note per hospital visit.
+        3. Drops notes shorter than ``cohort.min_note_tokens`` words (default 100),
+           because very short notes don't have enough text for a model to learn from.
+
+    Writes one file:
+        - ``silver/notes.parquet``  (cleaned, de-duplicated, length-filtered notes)
     """
     paths.ensure()
     bronze_notes = paths.bronze / "discharge_notes.parquet"
@@ -137,12 +163,23 @@ def run_silver(cfg: AppConfig, paths: Paths) -> None:
 
 
 def run_gold(cfg: AppConfig, paths: Paths) -> None:
-    """Build top-K ICD-10 label matrix aligned with Silver notes.
+    """Stage 3 — attach the top-50 ICD-10 labels to each note.
 
-    Writes:
-        - ``gold/labels.npz`` — scipy sparse CSR, shape (n_admissions, k)
-        - ``gold/label_names.json`` — list of ICD-10 codes in column order
-        - ``gold/hadm_ids.parquet`` — hadm_id per row, in y matrix order
+    For each note in Silver, look up which ICD-10 codes were assigned to that
+    hospital visit. We keep only the K most frequent codes in the cohort
+    (default K=50) — the "long tail" is out of scope for this project.
+
+    One important step: we also drop notes whose admissions don't have any
+    ICD-10 codes (they're ICD-9-only admissions from before 2015). Those can't
+    be used for ICD-10 training, so Silver is overwritten with the smaller,
+    cohort-matched set of notes. After this stage, Silver and Gold have the
+    same number of rows, in the same order.
+
+    Writes three files under ``paths.gold``:
+        - ``labels.npz``        — the label matrix. Sparse CSR shape (n_notes, K).
+                                  Each cell is 1 if that note has that code, else 0.
+        - ``label_names.json``  — the 50 ICD-10 codes in column order.
+        - ``hadm_ids.parquet``  — the hospital admission ID for each row.
     """
     paths.ensure()
     silver_path = paths.silver / "notes.parquet"
@@ -196,7 +233,11 @@ def run_gold(cfg: AppConfig, paths: Paths) -> None:
 
 
 def load_gold(paths: Paths) -> LabelSet:
-    """Read Gold artifacts back into a ``LabelSet``."""
+    """Read the three Gold files back into one ``LabelSet`` object.
+
+    This is the inverse of ``run_gold``'s writes — used by the training and
+    evaluation stages so they don't each need to know the file layout.
+    """
     y = csr_matrix(load_npz(paths.gold / "labels.npz"))
     labels = json.loads((paths.gold / "label_names.json").read_text(encoding="utf-8"))
     hadm_ids = pd.read_parquet(paths.gold / "hadm_ids.parquet")["hadm_id"].to_numpy()
@@ -208,10 +249,21 @@ def load_gold(paths: Paths) -> LabelSet:
 
 
 def run_splits(cfg: AppConfig, paths: Paths) -> None:
-    """Compute and persist patient-level train/val/test index manifest.
+    """Stage 4 — decide which notes go into train, validation, and test.
 
-    Writes:
-        - ``gold/splits.parquet`` — columns ``[row_idx, split]``
+    We split by **patient**, not by admission. Why: the same patient can have
+    multiple admissions, and patients have personal writing styles and
+    recurring conditions. If admissions from the same patient ended up in
+    both the training set and the test set, the model would "memorize" that
+    patient and look better than it really is. Splitting by patient prevents
+    this kind of data leakage.
+
+    Default split is 80% / 10% / 10% (train / val / test), with a fixed
+    random seed so the same patients land in the same split every time.
+
+    Writes one file:
+        - ``gold/splits.parquet``  — two columns: ``row_idx`` (which row in the
+                                     label matrix) and ``split`` (train/val/test).
     """
     paths.ensure()
     silver_path = paths.silver / "notes.parquet"
@@ -244,7 +296,7 @@ def run_splits(cfg: AppConfig, paths: Paths) -> None:
 
 
 def load_splits(paths: Paths) -> Splits:
-    """Read the splits manifest into a ``Splits`` object."""
+    """Read the splits file back into a ``Splits`` object with three index arrays."""
     df = pd.read_parquet(paths.gold / "splits.parquet")
     train_idx = df.loc[df["split"] == "train", "row_idx"].to_numpy()
     val_idx = df.loc[df["split"] == "val", "row_idx"].to_numpy()
@@ -257,10 +309,21 @@ def load_splits(paths: Paths) -> Splits:
 
 
 def run_train_baseline(cfg: AppConfig, paths: Paths) -> dict[str, float]:
-    """End-to-end baseline training on persisted Silver/Gold artifacts.
+    """Stage 5 — train the TF-IDF + Logistic Regression baseline and save it.
+
+    Reads the cleaned notes (Silver), the label matrix (Gold), and the split
+    assignments. Trains a word-feature model on the train split, then figures
+    out the best decision threshold for each of the 50 labels on the val split,
+    and scores the val split to get our first metrics.
+
+    Saves three things to disk:
+        - ``gold/baseline_model.joblib``     — the trained model itself.
+        - ``gold/baseline_thresholds.npy``   — one decision threshold per label.
+        - ``mlruns/<run-id>/``               — MLflow run with params + metrics.
 
     Returns:
-        Validation metrics as a flat dict (suitable for MLflow).
+        A flat dictionary of validation metrics (``micro_f1``, ``macro_f1``,
+        ``p_at_5``, ``p_at_8``, etc.) — the same shape we log to MLflow.
     """
     from mimic_icd_coder.evaluate import evaluate_multilabel
     from mimic_icd_coder.models.baseline import fit_baseline, log_to_mlflow
@@ -282,7 +345,10 @@ def run_train_baseline(cfg: AppConfig, paths: Paths) -> dict[str, float]:
     val_texts = [texts[i] for i in sp.val_idx]
     y = label_set.y
 
-    # MLflow — local file store under paths.mlruns
+    # MLflow is imported lazily (inside the function, not at module top) for two
+    # reasons: (1) `mic --help` should be fast — MLflow's import takes 1-2s, and
+    # most CLI commands don't need it; (2) it lets the training stage degrade
+    # gracefully if MLflow isn't installed (edge case, but keeps imports honest).
     try:
         import mlflow
     except ImportError:
@@ -345,10 +411,16 @@ def run_train_baseline(cfg: AppConfig, paths: Paths) -> dict[str, float]:
 
 
 def run_evaluate_test(cfg: AppConfig, paths: Paths) -> dict[str, float]:
-    """Load saved baseline and evaluate on held-out test split.
+    """Stage 6 — score the saved baseline on the held-out test split.
+
+    Loads the model and thresholds saved by stage 5, runs them on the test
+    notes, and computes the headline metrics. The test split has never been
+    seen during training or threshold tuning, so these numbers are the real
+    scoreboard.
 
     Returns:
-        Test metrics as a flat dict.
+        A flat dictionary of test metrics. Also includes ``mullenbach_*_delta``
+        keys — how far our numbers are from the published CAML baseline.
     """
     from mimic_icd_coder.evaluate import compare_to_mullenbach, evaluate_multilabel
     from mimic_icd_coder.models.baseline import BaselineModel
