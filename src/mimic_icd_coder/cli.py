@@ -81,9 +81,10 @@ def cli() -> None:
 @cli.command("ingest")
 @CONFIG_OPTION
 @ARTIFACTS_OPTION
-def cmd_ingest(config_path: Path, artifacts_dir: str) -> None:
+@LOG_LEVEL_OPTION
+def cmd_ingest(config_path: Path, artifacts_dir: str, log_level: str | None) -> None:
     """Read raw gz CSVs → Bronze Parquet."""
-    cfg, paths = _bootstrap(config_path, artifacts_dir)
+    cfg, paths = _bootstrap(config_path, artifacts_dir, log_level=log_level)
     get_logger("cli").info("stage.ingest")
     run_bronze(cfg, paths)
 
@@ -91,9 +92,10 @@ def cmd_ingest(config_path: Path, artifacts_dir: str) -> None:
 @cli.command("silver")
 @CONFIG_OPTION
 @ARTIFACTS_OPTION
-def cmd_silver(config_path: Path, artifacts_dir: str) -> None:
+@LOG_LEVEL_OPTION
+def cmd_silver(config_path: Path, artifacts_dir: str, log_level: str | None) -> None:
     """Bronze → Silver (cleaned, deduped, token-filtered notes)."""
-    cfg, paths = _bootstrap(config_path, artifacts_dir)
+    cfg, paths = _bootstrap(config_path, artifacts_dir, log_level=log_level)
     get_logger("cli").info("stage.silver")
     run_silver(cfg, paths)
 
@@ -101,9 +103,10 @@ def cmd_silver(config_path: Path, artifacts_dir: str) -> None:
 @cli.command("gold")
 @CONFIG_OPTION
 @ARTIFACTS_OPTION
-def cmd_gold(config_path: Path, artifacts_dir: str) -> None:
+@LOG_LEVEL_OPTION
+def cmd_gold(config_path: Path, artifacts_dir: str, log_level: str | None) -> None:
     """Silver + diagnoses → Gold (top-K ICD-10 multi-hot label matrix)."""
-    cfg, paths = _bootstrap(config_path, artifacts_dir)
+    cfg, paths = _bootstrap(config_path, artifacts_dir, log_level=log_level)
     get_logger("cli").info("stage.gold")
     run_gold(cfg, paths)
 
@@ -111,9 +114,10 @@ def cmd_gold(config_path: Path, artifacts_dir: str) -> None:
 @cli.command("splits")
 @CONFIG_OPTION
 @ARTIFACTS_OPTION
-def cmd_splits(config_path: Path, artifacts_dir: str) -> None:
+@LOG_LEVEL_OPTION
+def cmd_splits(config_path: Path, artifacts_dir: str, log_level: str | None) -> None:
     """Silver → patient-level train/val/test split manifest."""
-    cfg, paths = _bootstrap(config_path, artifacts_dir)
+    cfg, paths = _bootstrap(config_path, artifacts_dir, log_level=log_level)
     get_logger("cli").info("stage.splits")
     run_splits(cfg, paths)
 
@@ -147,9 +151,10 @@ def cmd_evaluate_test(config_path: Path, artifacts_dir: str, log_level: str | No
 @cli.command("run-all")
 @CONFIG_OPTION
 @ARTIFACTS_OPTION
-def cmd_run_all(config_path: Path, artifacts_dir: str) -> None:
+@LOG_LEVEL_OPTION
+def cmd_run_all(config_path: Path, artifacts_dir: str, log_level: str | None) -> None:
     """Run every pipeline stage end-to-end."""
-    cfg, paths = _bootstrap(config_path, artifacts_dir)
+    cfg, paths = _bootstrap(config_path, artifacts_dir, log_level=log_level)
     log = get_logger("cli")
     log.info("stage.run_all.start")
     run_bronze(cfg, paths)
