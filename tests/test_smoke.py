@@ -19,7 +19,12 @@ from mimic_icd_coder.evaluate import (
 )
 from mimic_icd_coder.logging_utils import configure_logging, is_debug_enabled
 from mimic_icd_coder.models.baseline import fit_baseline
-from mimic_icd_coder.models.transformer import TransformerTrainConfig, fine_tune, tokenize_and_chunk
+from mimic_icd_coder.models.transformer import (
+    TransformerTrainConfig,
+    fine_tune,
+    load_fine_tuned,
+    tokenize_and_chunk,
+)
 from mimic_icd_coder.thresholds import tune_thresholds
 from tests.fixtures.synthetic_notes import make_synthetic
 
@@ -462,6 +467,24 @@ def test_fine_tune_on_tiny_synthetic_runs_end_to_end(tmp_path: Path) -> None:
         (result_path / name).exists() for name in ("tokenizer_config.json", "vocab.txt")
     )
     assert tokenizer_marker, "tokenizer not saved alongside the model"
+    # Labels sidecar saved so load_fine_tuned can recover human-readable names.
+    assert (result_path / "labels.json").exists(), "labels.json missing from saved model"
+
+    # Round-trip: load the saved artifacts and score the val texts.
+    loaded = load_fine_tuned(result_path, max_length=cfg.max_length, stride=cfg.stride)
+    assert loaded.labels == label_set.labels, "labels round-tripped incorrectly"
+
+    probs = loaded.predict_proba(val_texts, batch_size=4)
+    # Contract: one row per doc, one column per label, all probs in [0, 1].
+    assert probs.shape == (len(val_texts), len(label_set.labels))
+    assert probs.dtype == np.float32
+    assert (
+        probs.min() >= 0.0 and probs.max() <= 1.0
+    ), f"sigmoid probs must be in [0, 1]; got min={probs.min()}, max={probs.max()}"
+
+    # Edge case: predict_proba on empty input returns shape (0, n_labels).
+    empty = loaded.predict_proba([], batch_size=4)
+    assert empty.shape == (0, len(label_set.labels))
 
 
 def test_threshold_tuning_returns_valid_array() -> None:
