@@ -36,29 +36,75 @@ class TransformerTrainConfig:
 def tokenize_and_chunk(
     texts: list[str], tokenizer: Any, max_length: int, stride: int = 0
 ) -> list[dict[str, Any]]:
-    """Token-level chunking for long notes — contiguous 512-BPE chunks by default.
+    """Token-level chunking for long notes.
 
-    Default is ``stride = 0`` for **contiguous** (non-overlapping) chunks per
-    ``DECISIONS.md`` 2026-04-20 (Chunk-and-max-pool). A non-zero stride enables
-    sliding-window overlap if a future experiment needs it.
+    Uses HuggingFace's ``return_overflowing_tokens`` so a single long note
+    becomes multiple training examples, each tagged with its parent doc
+    index via ``doc_idx``. Callers at inference time reduce back to one
+    prediction per doc by max-pooling sigmoid probabilities across every
+    chunk that shares a ``doc_idx`` (see ``DECISIONS.md`` entry on the
+    chunk-and-max-pool design).
 
-    Planned approach:
-        1. Tokenize with ``return_overflowing_tokens=True``.
-        2. Track parent doc index per chunk for max-pool aggregation at inference.
-        3. Keep attention masks and input_ids aligned.
+    ``stride`` is the number of tokens that overlap between adjacent
+    chunks. ``stride = 0`` is the original DECISIONS.md 2026-04-20 choice
+    (contiguous). ``stride > 0`` (e.g. 128 for a 512-token window) is a
+    sliding-window variant that avoids losing context at chunk boundaries;
+    the caller picks based on the current experiment.
 
     Args:
-        texts: Documents to tokenize.
-        tokenizer: HuggingFace tokenizer.
-        max_length: Max sequence length per chunk.
-        stride: Overlap between chunks (tokens). Default 0 = contiguous chunks.
+        texts: Documents to tokenize. Each string is one source note.
+        tokenizer: HuggingFace-compatible tokenizer with a ``__call__``
+            that accepts ``return_overflowing_tokens`` and returns
+            ``overflow_to_sample_mapping`` (the standard modern API).
+        max_length: Max sequence length per chunk, including BERT's
+            ``[CLS]`` and ``[SEP]`` special tokens.
+        stride: Overlap between adjacent chunks, in tokens. ``0`` gives
+            contiguous non-overlapping chunks.
 
     Returns:
-        List of tokenizer outputs, one per chunk.
+        A flat list of chunk dicts. Each dict has three keys:
+
+            - ``input_ids`` (list[int]): token ids for this chunk
+            - ``attention_mask`` (list[int]): 1 for real tokens, 0 for pad
+            - ``doc_idx`` (int): index into ``texts`` for the source note
+
+        Order is stable: all chunks for ``texts[0]`` come before any
+        chunks for ``texts[1]``, in sliding-window order within each doc.
     """
-    raise NotImplementedError(
-        "Pending on feat/transformer-finetune — implement chunking per DECISIONS.md 2026-04-20 (contiguous 512-BPE chunks + max-pool)"
+    if not texts:
+        return []
+
+    encoded = tokenizer(
+        texts,
+        truncation=True,
+        max_length=max_length,
+        stride=stride,
+        return_overflowing_tokens=True,
+        padding=False,
     )
+
+    mapping = encoded["overflow_to_sample_mapping"]
+    input_ids_list = encoded["input_ids"]
+    attention_mask_list = encoded["attention_mask"]
+
+    chunks: list[dict[str, Any]] = [
+        {
+            "input_ids": list(input_ids_list[i]),
+            "attention_mask": list(attention_mask_list[i]),
+            "doc_idx": int(mapping[i]),
+        }
+        for i in range(len(input_ids_list))
+    ]
+
+    logger.info(
+        "transformer.tokenize_and_chunk",
+        n_docs=len(texts),
+        n_chunks=len(chunks),
+        avg_chunks_per_doc=round(len(chunks) / max(1, len(texts)), 2),
+        max_length=max_length,
+        stride=stride,
+    )
+    return chunks
 
 
 def fine_tune(
