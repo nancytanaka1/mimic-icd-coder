@@ -472,14 +472,16 @@ mimic-icd-coder/
 | Scaffold, CI, pre-commit, Asset Bundle | Ready |
 | EDA notebook + paper + data card + model card + eval report | Complete |
 | Bronze ingestion (5 tables including ICD dictionary) | Implemented and run on real data |
-| Silver (clean + min-token filter) | Implemented; not yet run end-to-end |
-| Gold (top-50 label matrix + patient splits) | Implemented; not yet run end-to-end |
-| TF-IDF + LR baseline | Implemented; not yet run |
+| Silver (clean + min-token filter) | **Shipped** — 122,283-note cohort built |
+| Gold (top-50 label matrix + patient splits) | **Shipped** — 50-label matrix on 122,283 admissions |
+| TF-IDF + LR baseline | **Shipped** — test Micro F1 0.617, Macro F1 0.584; beats Mullenbach CAML on F1 (see §6) |
 | Per-label threshold tuning | Implemented |
 | Evaluation (Micro/Macro F1, P@k, Mullenbach deltas) | Implemented |
+| Per-label error analysis + calibration + confusion patterns | **Shipped** — see [`reports/baseline_error_analysis.md`](reports/baseline_error_analysis.md) |
 | MLflow + Unity Catalog Model Registry | Local MLflow wired; Registry write on Databricks only |
-| Chunked Bio_ClinicalBERT fine-tune | Scaffolded — [`jobs/train_transformer.py`](jobs/train_transformer.py) |
+| Chunked Bio_ClinicalBERT fine-tune | Scaffolded — [`jobs/train_transformer.py`](jobs/train_transformer.py); pre-registered predictions in error analysis doc |
 | Clinical-Longformer fallback | Not started — trigger-driven |
+| Azure Databricks workspace + Unity Catalog bootstrap | Not started — branched from external bootstrap project |
 | Model Serving endpoint | Not started |
 | Evidently drift monitoring | Not started |
 
