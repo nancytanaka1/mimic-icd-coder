@@ -12,7 +12,7 @@ from typing import Any
 
 import numpy as np
 
-from mimic_icd_coder.logging_utils import get_logger
+from mimic_icd_coder.logging_utils import get_logger, is_debug_enabled
 
 logger = get_logger(__name__)
 
@@ -23,12 +23,14 @@ class TransformerTrainConfig:
 
     model_name: str = "emilyalsentzer/Bio_ClinicalBERT"
     max_length: int = 512
+    stride: int = 128
     batch_size: int = 16
     learning_rate: float = 2e-5
     epochs: int = 3
     warmup_ratio: float = 0.1
     weight_decay: float = 0.01
     fp16: bool = True
+    gradient_checkpointing: bool = True
     gradient_accumulation_steps: int = 1
     seed: int = 42
 
@@ -116,35 +118,176 @@ def fine_tune(
     cfg: TransformerTrainConfig,
     output_dir: str | Path,
 ) -> Path:
-    """Fine-tune a transformer for multi-label ICD prediction.
+    """Fine-tune a transformer for multi-label ICD-10 prediction.
 
-    Planned implementation:
-        - HuggingFace ``Trainer`` with multi-label head (BCEWithLogitsLoss)
-        - Per-epoch val macro F1 + early stopping
-        - MLflow autolog for params and metrics
-        - Save best checkpoint + tokenizer to ``output_dir``
+    Uses HuggingFace ``Trainer`` with ``problem_type="multi_label_classification"``
+    on the underlying model, which triggers ``BCEWithLogitsLoss`` automatically —
+    the correct loss for multi-label. Tokenizes each source document into
+    ``max_length``-token chunks via ``tokenize_and_chunk`` with ``stride`` overlap,
+    and every chunk of a document is trained against the parent doc's full
+    label vector. Chunk-level predictions are reduced to one prediction per
+    doc at inference time via max-pool on sigmoid probabilities (see
+    ``load_fine_tuned``).
 
-    Visibility contract (shared with ``baseline.fit_baseline``):
-        Call ``mimic_icd_coder.logging_utils.is_debug_enabled()`` and wire the
-        result into HuggingFace ``TrainingArguments``. When True, set
-        ``logging_strategy="steps"``, ``logging_steps=50``,
-        ``disable_tqdm=False``, and ``report_to=["mlflow"]`` so per-step loss
-        / grad-norm / LR stream to stdout and MLflow. When False, keep
-        ``logging_strategy="epoch"`` so INFO-mode logs stay at per-epoch
-        granularity. This matches the LR baseline's "DEBUG = inner loop
-        visible, INFO = stage boundaries only" contract.
+    Visibility contract (matches ``baseline.fit_baseline``):
+        The function inspects ``mimic_icd_coder.logging_utils.is_debug_enabled()``
+        at call time and wires the result into HuggingFace ``TrainingArguments``:
+
+            debug → ``logging_strategy="steps"``, ``logging_steps=25``,
+                    ``disable_tqdm=False``
+            info  → ``logging_strategy="epoch"``, ``logging_steps=500``,
+                    ``disable_tqdm=True``
+
+        MLflow reporting is always on — the distinction is granularity, not
+        presence. Matches the "DEBUG = inner loop visible, INFO = stage
+        boundaries only" contract established in the LR baseline.
+
+    Precision:
+        ``cfg.fp16`` is honored only if CUDA is available; on CPU it is
+        automatically forced to False to avoid HuggingFace raising
+        "torch.amp.autocast cannot be used with CPU" on modern torch.
 
     Args:
-        train_texts / val_texts: Document lists.
-        y_train / y_val: Dense multi-label targets, ``float32``.
-        labels: Label name list.
-        cfg: Training configuration.
-        output_dir: Output directory for checkpoints.
+        train_texts / val_texts: Document lists (one string per note).
+        y_train / y_val: Multi-hot targets shape ``(n_docs, len(labels))``.
+            Cast internally to float32 for BCE.
+        labels: Ordered list of ICD-10 codes corresponding to the columns
+            of ``y_train`` / ``y_val``.
+        cfg: Training configuration (see ``TransformerTrainConfig``).
+        output_dir: Directory to save the final model + tokenizer.
 
     Returns:
-        Path to the saved model directory.
+        ``Path`` to the saved model directory — ready for ``load_fine_tuned``.
     """
-    raise NotImplementedError("Pending on feat/transformer-finetune")
+    # Local imports so the module is importable on systems without torch
+    # (e.g. a pipeline step that only needs tokenize_and_chunk).
+    import torch
+    from datasets import Dataset
+    from sklearn.metrics import f1_score
+    from transformers import (
+        AutoModelForSequenceClassification,
+        AutoTokenizer,
+        DataCollatorWithPadding,
+        Trainer,
+        TrainingArguments,
+    )
+
+    n_labels = len(labels)
+    if y_train.shape[1] != n_labels or y_val.shape[1] != n_labels:
+        raise ValueError(
+            f"y_train / y_val must have {n_labels} columns matching `labels`; "
+            f"got y_train={y_train.shape}, y_val={y_val.shape}"
+        )
+
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    debug = is_debug_enabled()
+    effective_fp16 = cfg.fp16 and torch.cuda.is_available()
+
+    logger.info(
+        "transformer.fine_tune.start",
+        model_name=cfg.model_name,
+        n_train_docs=len(train_texts),
+        n_val_docs=len(val_texts),
+        n_labels=n_labels,
+        max_length=cfg.max_length,
+        stride=cfg.stride,
+        batch_size=cfg.batch_size,
+        epochs=cfg.epochs,
+        learning_rate=cfg.learning_rate,
+        effective_fp16=effective_fp16,
+        debug=debug,
+    )
+
+    tokenizer = AutoTokenizer.from_pretrained(cfg.model_name)
+    model = AutoModelForSequenceClassification.from_pretrained(
+        cfg.model_name,
+        num_labels=n_labels,
+        problem_type="multi_label_classification",
+        # The pre-trained checkpoint's classification head is almost always
+        # shaped for its original task (e.g. 2-class sentiment) — we always
+        # reinitialize it for our 50-label multi-label ICD task, which is
+        # the whole point of fine-tuning. Without this flag, transformers 5.x
+        # raises on the size mismatch instead of re-initializing.
+        ignore_mismatched_sizes=True,
+    )
+
+    train_chunks = tokenize_and_chunk(
+        train_texts, tokenizer, max_length=cfg.max_length, stride=cfg.stride
+    )
+    val_chunks = tokenize_and_chunk(
+        val_texts, tokenizer, max_length=cfg.max_length, stride=cfg.stride
+    )
+
+    def _chunks_to_rows(chunks: list[dict[str, Any]], y: np.ndarray) -> list[dict[str, Any]]:
+        return [
+            {
+                "input_ids": c["input_ids"],
+                "attention_mask": c["attention_mask"],
+                "labels": y[c["doc_idx"]].astype(np.float32).tolist(),
+            }
+            for c in chunks
+        ]
+
+    train_ds = Dataset.from_list(_chunks_to_rows(train_chunks, y_train))
+    val_ds = Dataset.from_list(_chunks_to_rows(val_chunks, y_val))
+
+    args = TrainingArguments(
+        output_dir=str(output_path),
+        num_train_epochs=cfg.epochs,
+        per_device_train_batch_size=cfg.batch_size,
+        per_device_eval_batch_size=cfg.batch_size,
+        gradient_accumulation_steps=cfg.gradient_accumulation_steps,
+        learning_rate=cfg.learning_rate,
+        warmup_ratio=cfg.warmup_ratio,
+        weight_decay=cfg.weight_decay,
+        fp16=effective_fp16,
+        gradient_checkpointing=cfg.gradient_checkpointing,
+        logging_strategy="steps" if debug else "epoch",
+        logging_steps=25 if debug else 500,
+        eval_strategy="epoch",
+        save_strategy="epoch",
+        save_total_limit=1,
+        load_best_model_at_end=True,
+        metric_for_best_model="eval_micro_f1",
+        greater_is_better=True,
+        report_to=["mlflow"],
+        disable_tqdm=not debug,
+        seed=cfg.seed,
+    )
+
+    def compute_metrics(eval_pred: Any) -> dict[str, float]:
+        logits, labels_arr = eval_pred
+        probs = 1.0 / (1.0 + np.exp(-logits))
+        preds = (probs >= 0.5).astype(int)
+        return {
+            "micro_f1": float(f1_score(labels_arr, preds, average="micro", zero_division=0)),
+            "macro_f1": float(f1_score(labels_arr, preds, average="macro", zero_division=0)),
+        }
+
+    trainer = Trainer(
+        model=model,
+        args=args,
+        train_dataset=train_ds,
+        eval_dataset=val_ds,
+        data_collator=DataCollatorWithPadding(tokenizer),
+        compute_metrics=compute_metrics,
+    )
+
+    logger.info(
+        "transformer.fine_tune.train_start",
+        n_train_chunks=len(train_ds),
+        n_val_chunks=len(val_ds),
+    )
+    trainer.train()
+    logger.info("transformer.fine_tune.train_done")
+
+    trainer.save_model(str(output_path))
+    tokenizer.save_pretrained(str(output_path))
+    logger.info("transformer.fine_tune.saved", path=str(output_path))
+
+    return output_path
 
 
 def load_fine_tuned(model_dir: str | Path) -> object:
