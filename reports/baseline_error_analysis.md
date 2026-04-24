@@ -4,6 +4,12 @@
 **Date:** 2026-04-24
 **MLflow run:** `4e577699a67a4027bc27628e9b237ac5`
 **Evaluation data:** held-out patient-level test split (n=12,091 admissions, 6,567 patients, seed 42)
+> **TL;DR** — 30-second skim.
+>
+> - **Baseline beats Mullenbach 2018 CAML on F1.** Micro F1 0.617 (+0.003 vs. CAML), Macro F1 0.584 (+0.052). Trails on P@5 (0.526 vs. 0.609) — a deliberate trade from `class_weight="balanced"` + F1-optimal thresholds.
+> - **Signature failure pattern:** Z87.891 (personal history of nicotine dependence) is systematically over-fired in 9 of the top 10 confusion pairs at 36–49% FP rates on unrelated conditions. Root cause is calibration, not representation — a transformer encoder alone will not fix this.
+> - **Pre-registered transformer predictions:** F17.210 (current vs. former smoker), K59.00 (buried constipation meds), and Z23 (buried immunization) should exit the worst-10 after Bio_ClinicalBERT fine-tuning. Specific F1 targets and falsification conditions are at the bottom of this document.
+
 **Scope:** this document is an honest read of where the shipped TF-IDF + One-vs-Rest Logistic Regression baseline succeeds and fails, with per-label evidence and pre-registered predictions about what a chunked Bio_ClinicalBERT transformer will and will not fix.
 
 **DUA compliance.** This document reports aggregate evaluation statistics derived from the MIMIC-IV credentialed dataset under the PhysioNet Credentialed Health Data License v1.5.0. No individual patient records, discharge-note text, admission identifiers, or patient identifiers are reproduced. Per-label support counts, confusion-pair counts, and cohort cardinality are cohort-level aggregates equivalent to those published in peer-reviewed MIMIC research. The three clinical-note excerpts in the *Illustrative synthetic failure modes* section are synthetic examples authored by Nancy Tanaka from domain knowledge; they contain zero real MIMIC text. ICD-10 code descriptions are sourced from the public ICD-10-CM dictionary, not from MIMIC content. Row-level parquet artifacts produced by the extraction script are gitignored by the repository's `*.parquet` defensive rule and never leave local disk.
