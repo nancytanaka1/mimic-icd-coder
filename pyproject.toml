@@ -55,11 +55,15 @@ dev = [
     "types-PyYAML",
     "ipykernel>=6.29",
     "pre-commit>=3.7",
-    # Transformer-code phase: tokenize_and_chunk needs the HuggingFace
-    # tokenizer, but not torch. torch + accelerate + datasets + evaluate
-    # are in the separate [transformer] extra for the fine_tune and
-    # predict phases.
+    # Transformer-code phase: HuggingFace tokenizer for tokenize_and_chunk
+    # plus torch/datasets/accelerate for the fine_tune smoke test. Pip
+    # resolves to the CPU torch wheel on Linux CI (~200 MB); the
+    # GPU-capable install path is still in the separate [transformer]
+    # extra for workstations that want CUDA.
     "transformers>=4.40",
+    "torch>=2.2",
+    "datasets>=2.18",
+    "accelerate>=0.28",
 ]
 
 [project.scripts]

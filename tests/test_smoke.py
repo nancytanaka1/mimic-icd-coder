@@ -19,7 +19,7 @@ from mimic_icd_coder.evaluate import (
 )
 from mimic_icd_coder.logging_utils import configure_logging, is_debug_enabled
 from mimic_icd_coder.models.baseline import fit_baseline
-from mimic_icd_coder.models.transformer import tokenize_and_chunk
+from mimic_icd_coder.models.transformer import TransformerTrainConfig, fine_tune, tokenize_and_chunk
 from mimic_icd_coder.thresholds import tune_thresholds
 from tests.fixtures.synthetic_notes import make_synthetic
 
@@ -386,6 +386,82 @@ def test_tokenize_and_chunk_stride_increases_chunk_count() -> None:
         f"stride=8 must produce at least as many chunks as stride=0; "
         f"got sliding={len(sliding)}, contiguous={len(contiguous)}"
     )
+
+
+def test_fine_tune_on_tiny_synthetic_runs_end_to_end(tmp_path: Path) -> None:
+    """Smoke test for the transformer fine_tune path.
+
+    Uses ``hf-internal-testing/tiny-random-bert`` (~1 MB, random weights,
+    ~500 params) so the test runs on CPU in under 90 seconds with a
+    negligible first-run download. The goal is API correctness — forward
+    pass, backward pass, checkpoint save, MLflow logging hook — NOT model
+    quality; we never assert on loss or F1 values because the fixture is
+    too small to train meaningfully.
+    """
+    import os
+
+    import mlflow
+
+    # Defensive reset: prior tests may have left an active MLflow run or
+    # cached an experiment ID whose on-disk directory has been cleaned up
+    # by pytest's tmp_path teardown. Without this, HuggingFace Trainer's
+    # MLflow integration raises "Could not find experiment with ID ..."
+    # when the cached ID no longer has a backing directory.
+    if mlflow.active_run() is not None:
+        mlflow.end_run()
+    mlflow.set_tracking_uri(f"file:{(tmp_path / 'mlruns').as_posix()}")
+    mlflow.set_experiment("fine-tune-smoke-test")
+    os.environ["MLFLOW_DISABLE_TELEMETRY"] = "1"
+
+    corpus = make_synthetic(n_patients=12, seed=11)
+    silver = build_silver_notes(corpus["notes"], min_tokens=50)
+    label_set = build_labels(silver, corpus["diagnoses_icd"], k=3)
+
+    texts = silver["text"].tolist()
+    y = np.asarray(label_set.y.todense()).astype(np.float32)
+
+    n = len(texts)
+    split = max(2, int(n * 0.75))
+    train_texts, val_texts = texts[:split], texts[split:]
+    y_train, y_val = y[:split], y[split:]
+
+    cfg = TransformerTrainConfig(
+        model_name="hf-internal-testing/tiny-random-bert",
+        max_length=64,
+        stride=16,
+        batch_size=2,
+        learning_rate=1e-3,
+        epochs=1,
+        warmup_ratio=0.0,
+        weight_decay=0.0,
+        fp16=False,
+        gradient_checkpointing=False,
+        gradient_accumulation_steps=1,
+        seed=42,
+    )
+
+    output_dir = tmp_path / "fine_tune_output"
+
+    result_path = fine_tune(
+        train_texts=train_texts,
+        y_train=y_train,
+        val_texts=val_texts,
+        y_val=y_val,
+        labels=label_set.labels,
+        cfg=cfg,
+        output_dir=output_dir,
+    )
+
+    # Contract: fine_tune returns a Path to a saved-model directory.
+    assert isinstance(result_path, Path)
+    assert result_path.exists()
+    # Model saved (HF writes config.json and weights).
+    assert (result_path / "config.json").exists(), "config.json missing from saved model"
+    # Tokenizer saved (HF writes tokenizer_config.json or at minimum vocab files).
+    tokenizer_marker = any(
+        (result_path / name).exists() for name in ("tokenizer_config.json", "vocab.txt")
+    )
+    assert tokenizer_marker, "tokenizer not saved alongside the model"
 
 
 def test_threshold_tuning_returns_valid_array() -> None:
