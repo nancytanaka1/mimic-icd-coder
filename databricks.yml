@@ -20,7 +20,7 @@ variables:
     default: abfss://raw@<storage>.dfs.core.windows.net/mimic-iv/hosp/
   git_branch:
     description: Git branch for notebook / job source
-    default: main
+    default: master
 
 workspace:
   host: https://adb-XXXXXXXXXXXXXXXX.XX.azuredatabricks.net
