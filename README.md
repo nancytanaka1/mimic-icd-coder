@@ -13,7 +13,7 @@ End-to-end clinical NLP pipeline deployed on Azure Databricks (Delta Lake + Unit
 | P@5 | 0.526 (−0.083 vs. CAML) | TBD | 0.609 |
 | P@8 | 0.433 | TBD | n/a (not reported for top-50) |
 
-Source: Mullenbach et al. 2018 Table 5. Baseline evaluated on held-out patient-level test split (n=12,091 admissions, seed=42). Val→test drift <0.01 across all metrics; splits are clean. Baseline uses `class_weight="balanced"` + per-label F1-optimal thresholds, which trades ranking calibration (P@k) for per-label F1 — a deliberate baseline choice. P@k reclaim is the transformer branch's objective. See [`DECISIONS.md`](DECISIONS.md) 2026-04-23.
+Source: Mullenbach et al. 2018 Table 5. Baseline evaluated on held-out patient-level test split (n=12,091 admissions, seed=42). Val→test drift <0.01 on every metric, confirming val-tuned thresholds generalize. Leakage prevention is architectural, not inferred from the drift: train/val/test are disjoint by `subject_id`, verified in [`tests/test_smoke.py::test_patient_split_disjoint`](tests/test_smoke.py). Baseline uses `class_weight="balanced"` + per-label F1-optimal thresholds, which trades ranking calibration (P@k) for per-label F1 — a deliberate baseline choice. P@k reclaim is the transformer branch's objective. See [`DECISIONS.md`](DECISIONS.md) 2026-04-23.
 
 **Reproducibility.** `mic run-all --config configs/dev.nancy.yml` on fresh MIMIC-IV v3.1 Hosp + MIMIC-IV-Note v2.2 raw CSVs reproduces every headline metric to **15+ decimal places** (verified 2026-04-24, MLflow run `6e809d5dfd3b46dbafae84ddba710bd7`). Reproducibility comes from a fixed patient-split seed (42), a deterministic liblinear solver, and file-on-disk stage boundaries that make each step independently re-runnable. A reviewer with PhysioNet credentials cloning this repo will get identical numbers end-to-end.
 
@@ -215,6 +215,26 @@ Triggered only if chunked Bio_ClinicalBERT misses the Micro F1 target by more th
 ## 6. Evaluation
 
 Full methodology and Mullenbach comparison caveats in [`reports/eval_report.qmd`](reports/eval_report.qmd).
+
+### Test-split results
+
+Held-out patient-level test split, n=12,091 admissions, 6,567 patients. Seed 42. MLflow run `4e577699a67a4027bc27628e9b237ac5`.
+
+| Metric | Value | Target | Mullenbach CAML (MIMIC-III-50) |
+|---|---:|---:|---|
+| Micro F1 | 0.6174 | ≥ 0.70 | 0.614 (+0.003) |
+| Macro F1 | 0.5843 | ≥ 0.55 | 0.532 (+0.052) |
+| P@5 | 0.5259 | ≥ 0.70 | 0.609 (−0.083) |
+| P@8 | 0.4326 | ≥ 0.65 | n/a (not reported for top-50) |
+| P@15 | 0.2935 | — | — |
+| Micro AUC | 0.9284 | — | — |
+| Macro AUC | 0.9097 | — | — |
+| Micro AUPRC | 0.6263 | — | — |
+| Macro AUPRC | 0.5739 | — | — |
+
+Model: `sklearn.OneVsRestClassifier(LogisticRegression(class_weight="balanced"))` over TF-IDF (1–2 grams, `min_df=5`, 200 K vocab cap). Per-label thresholds tuned on val via F1 maximization. Val→test drift ≤ 0.005 on every metric, confirming val-tuned thresholds generalize. Train/val/test are disjoint by `subject_id` (verified in [`tests/test_smoke.py::test_patient_split_disjoint`](tests/test_smoke.py)) — this prevents the patient-writing-style leakage an admission-level split would allow.
+
+### Metrics used
 
 | Metric | Use |
 |---|---|
