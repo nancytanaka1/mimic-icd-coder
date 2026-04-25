@@ -75,3 +75,6 @@ reports/*.html
 # redirected stdout capture (e.g., `mic run-all > run.log 2>&1`) would land here.
 *.log
 logs/
+
+# MLflow sqlite tracking store (created when no tracking URI is set)
+mlflow.db
