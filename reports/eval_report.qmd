@@ -15,11 +15,11 @@ format:
 
 *To be filled after baseline training completes.*
 
-One paragraph: model choice, cohort, headline metrics, delta versus Mullenbach et al. 2018.
+One paragraph: model choice, cohort, absolute headline metrics, key MLOps disciplines (patient-level splits, per-label thresholds, reproducibility, calibration analysis).
 
 # Research Question
 
-Given a free-text discharge summary, predict the set of ICD-10 codes assigned to that admission. Benchmark against Mullenbach et al. 2018 CAML (MIMIC-III top-50 ICD-9).
+Given a free-text discharge summary, predict the set of ICD-10 codes assigned to that admission. The multi-label framing, patient-level evaluation discipline, and top-50 cardinality are inherited from Mullenbach et al. 2018 (CAML, MIMIC-III/ICD-9 top-50); this work targets MIMIC-IV/ICD-10 and does not claim apples-to-apples benchmark equivalence — see [`DECISIONS.md`](../DECISIONS.md) 2026-04-26.
 
 # Data
 
@@ -27,7 +27,7 @@ Cohort construction, composition, and limitations are documented in [`reports/da
 
 - MIMIC-IV-Note v2.2 + MIMIC-IV v3.1 Hosp, joined on `hadm_id`.
 - Top-50 ICD-10 codes covering 91.04% of admissions; long tail spans 19,440 distinct codes.
-- Modelable cohort: **122,288 admissions**.
+- Modelable cohort: **122,283 admissions**.
 - Splits: patient-level 80/10/10 by `subject_id`, seed = 42.
 
 # Methods
@@ -47,14 +47,16 @@ Full rationale in [`DECISIONS.md`](../DECISIONS.md).
 
 ## Headline Metrics (Test Split)
 
-| Metric | Baseline (TF-IDF + LR) | Chunked Bio_ClinicalBERT | Mullenbach 2018 CAML (MIMIC-III top-50) | Target | Floor | Target Δ vs. CAML |
-|---|---|---|---|---|---|---|
-| Micro F1 | **0.617** | TBD | 0.614 | ≥ 0.70 | 0.55 | +0.086 |
-| Macro F1 | **0.584** | TBD | 0.532 | ≥ 0.55 | 0.40 | +0.018 |
-| P@5 | 0.526 | TBD | 0.609 | ≥ 0.70 | — | +0.091 |
-| P@8 | 0.433 | TBD | n/a (not reported for top-50) | ≥ 0.65 | — | — |
+Test-split results on MIMIC-IV-Note v2.2 + MIMIC-IV v3.1 Hosp, top-50 ICD-10 codes. Patient-level held-out test split, n=12,091 admissions, seed=42.
 
-CAML baseline values are from Mullenbach et al. 2018, Table 5 ("Results on MIMIC-III, 50 labels"), CAML row. P@8 is not reported in Table 5 (the top-50 setting); the paper's P@8 values (0.709 for MIMIC-III full, 0.523 for MIMIC-II full) are from different evaluation settings and are not used here. See [`src/mimic_icd_coder/evaluate.py::MULLENBACH_CAML_TOP50`](../src/mimic_icd_coder/evaluate.py) for the citation.
+| Metric | Baseline (TF-IDF + LR) | Chunked Bio_ClinicalBERT | Target | Floor |
+|---|---|---|---|---|
+| Micro F1 | **0.617** | TBD | ≥ 0.70 | 0.55 |
+| Macro F1 | **0.584** | TBD | ≥ 0.55 | 0.40 |
+| P@5 | 0.526 | TBD | ≥ 0.70 | — |
+| P@8 | 0.433 | TBD | ≥ 0.65 | — |
+
+Targets are absolute, not benchmark-relative. They reflect the operational threshold for "the transformer branch is delivering value over the baseline." Numerical comparison to Mullenbach et al. 2018's published numbers is not methodologically valid because this work targets MIMIC-IV/ICD-10 (different dataset, different coding system, different cohort, different label space) — see [`DECISIONS.md`](../DECISIONS.md) 2026-04-26.
 
 ## Per-Label Error Analysis
 
@@ -74,15 +76,18 @@ Macro F1 reported by:
 
 Temporal fairness deferred pending Silver-stage date un-shifting. Race-stratified analysis is deferred pending Silver/Gold integration of the demographic columns — race is already ingested to Bronze (per `feat/ingest-demographic`), but the fairness slicing pass has not been implemented. See [`DECISIONS.md`](../DECISIONS.md) 2026-04-21.
 
-# Comparison to Mullenbach 2018
+# Methodological inheritance from Mullenbach 2018
 
-Metric deltas are reported with the following caveats:
+Mullenbach et al. 2018 (CAML) established the multi-label ICD-coding benchmark on MIMIC-III/ICD-9 top-50. This work inherits its methodological framing — multi-label classification with sigmoid + per-label decisions, patient-level evaluation, P@k as a coder-assist-relevant metric, top-50 label cardinality as a tractable problem size. These are methodological inheritances, not benchmark equivalences.
 
-- Cohort differences — size (47K MIMIC-III vs. 122K here), era (pre-2015 vs. 2008–2019), code system (ICD-9 vs. ICD-10).
-- ICD-10 sub-code fragmentation redistributes common conditions (CHF, CKD, COPD, T2DM) across several codes, so top-50 label spaces are not identical.
-- CAML trained on full-length notes with custom attention; this work uses chunked Bio_ClinicalBERT.
+Numerical comparison between this work's results and Mullenbach's published numbers is **not methodologically valid**. The work differs from Mullenbach 2018 along all four axes that matter:
 
-Deltas are informative but not strictly apples-to-apples.
+- **Different dataset.** Mullenbach used MIMIC-III v1.4; this work uses MIMIC-IV v3.1 + MIMIC-IV-Note v2.2.
+- **Different coding system.** Mullenbach used ICD-9-CM; this work uses ICD-10-CM. Label spaces are non-overlapping; the top-50 codes in each are different sets covering different clinical concepts.
+- **Different cohort.** Different size (47K MIMIC-III vs. 122K here), different era (pre-2015 vs. 2008–2019), different documentation conventions.
+- **Different model architecture.** CAML used full-length notes with custom label-attention; this work uses chunked Bio_ClinicalBERT.
+
+A future apples-to-apples reproduction on MIMIC-III/ICD-9 — using Mullenbach's published cohort logic and label set — would make benchmark comparison meaningful. Tracked as future work in [`DECISIONS.md`](../DECISIONS.md) 2026-04-26; out of scope for the current deliverable.
 
 # Limitations
 
@@ -90,7 +95,7 @@ See [`reports/data_card.md`](data_card.md). Key points relevant to eval interpre
 
 - Cohort is 48% of all ICD-10 admissions in v3.1 Hosp, limited by MIMIC-IV-Note v2.2 sampling.
 - Temporal and race-stratified fairness evaluation are deferred, not absent.
-- Top-50 K is comparability-driven, not coverage-optimal; raising K would improve coverage but weaken the CAML comparison.
+- Top-50 K is methodologically inherited from Mullenbach 2018 as a tractable problem size, not coverage-optimal. Raising K would improve coverage but the choice here keeps the methodological framing aligned with prior published work even though direct numerical comparison is invalid (see *Methodological inheritance from Mullenbach 2018* above).
 
 # References
 
