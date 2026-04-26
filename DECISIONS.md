@@ -13,6 +13,7 @@ Format: `[Decision]: [What was chosen] — [Why] — [Alternatives considered]`
 - **2026-04-20** — Chunk-and-max-pool over full notes; Longformer deferred
 - **2026-04-21** — Defer date un-shifting to Silver; EDA chart flagged as diagnostic-only
 - **2026-04-23** — TF-IDF + LR baseline ships on the F1 story; P@k floor lowered to informational
+- **2026-04-26** — Reframing Mullenbach 2018 from benchmark to inspiration
 
 ---
 
@@ -136,3 +137,30 @@ would be portfolio-irrelevant. Real F1 numbers will come from
 **Conclusion** — loop validated end-to-end. Tokenization, chunking, fp16 training,
 MLflow logging, and TrainingArguments wiring all confirmed working. Ready to scale
 on Databricks GPU.
+
+
+## 2026-04-26 — Reframing Mullenbach 2018 from benchmark to inspiration
+
+Earlier drafts of the README presented numerical deltas between this work's
+results on MIMIC-IV/ICD-10 top-50 and Mullenbach et al. 2018's results on
+MIMIC-III/ICD-9 top-50 (Table 5). On review, the comparison is
+methodologically invalid: different dataset, different coding system,
+different cohort, different label space. Numerical proximity ("Micro F1
+within 0.003") is confounded by all four factors and does not constitute
+benchmark equivalence.
+
+Decision: drop all numerical comparisons to Mullenbach 2018 from the README,
+the metric targets, and the MLflow logged metrics. Retain the methodological
+inheritance (multi-label framing, patient-level splits, P@k as
+coder-assist-relevant, top-50 label cardinality) and cite the paper as the
+intellectual antecedent.
+
+A future apples-to-apples reproduction on MIMIC-III/ICD-9 — using
+Mullenbach's published cohort logic and label set — would make benchmark
+comparison meaningful. Tracked as future work; out of scope for the current
+job-search-window deliverable.
+
+Affected:
+- README.md (headline, §1, §6, §14)
+- src/mimic_icd_coder/evaluate.py (compare_to_mullenbach function deprecated)
+- MLflow logged metrics (delta_vs_caml_* removed from baseline runs going forward)

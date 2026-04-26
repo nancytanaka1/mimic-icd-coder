@@ -6,7 +6,7 @@
 **Evaluation data:** held-out patient-level test split (n=12,091 admissions, 6,567 patients, seed 42)
 > **TL;DR** — 30-second skim.
 >
-> - **Baseline beats Mullenbach 2018 CAML on F1.** Micro F1 0.617 (+0.003 vs. CAML), Macro F1 0.584 (+0.052). Trails on P@5 (0.526 vs. 0.609) — a deliberate trade from `class_weight="balanced"` + F1-optimal thresholds.
+> - **Baseline ships strong absolute numbers.** Micro F1 0.617, Macro F1 0.584 on held-out patient-level test split (n=12,091, 6,567 patients). P@5 = 0.526 — a deliberate trade from `class_weight="balanced"` + F1-optimal per-label thresholds.
 > - **Signature failure pattern:** Z87.891 (personal history of nicotine dependence) is systematically over-fired in 9 of the top 10 confusion pairs at 36–49% FP rates on unrelated conditions. Root cause is calibration, not representation — a transformer encoder alone will not fix this.
 > - **Pre-registered transformer predictions:** F17.210 (current vs. former smoker), K59.00 (buried constipation meds), and Z23 (buried immunization) should exit the worst-10 after Bio_ClinicalBERT fine-tuning. Specific F1 targets and falsification conditions are at the bottom of this document.
 

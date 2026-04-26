@@ -145,6 +145,11 @@ def test_pipeline_baseline_beats_random(synthetic_workspace: tuple[AppConfig, Pa
 
     test_metrics = run_evaluate_test(cfg, paths)
     assert "micro_f1" in test_metrics
-    assert "mullenbach_micro_f1_delta" in test_metrics
+    # mullenbach_*_delta keys were removed per DECISIONS.md 2026-04-26
+    # (different dataset / coding system / cohort vs. Mullenbach 2018);
+    # asserting on test_metrics["micro_f1"] alone is the right contract now.
+    assert not any(
+        k.startswith("mullenbach_") for k in test_metrics
+    ), "mullenbach_* keys must not be present after the 2026-04-26 reframe"
     # Test metrics on a tiny synthetic corpus may trail val; sanity bound only
     assert test_metrics["micro_f1"] > 0.1

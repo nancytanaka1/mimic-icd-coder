@@ -175,19 +175,36 @@ def evaluate_multilabel(
     return result
 
 
-def compare_to_mullenbach(result: EvalResult) -> dict[str, float]:
-    """Return absolute deltas from the Mullenbach 2018 CAML top-50 baseline.
+def compare_to_mullenbach(result: EvalResult) -> dict[str, float]:  # noqa: ARG001
+    """**Deprecated.** Returns numeric deltas from Mullenbach 2018 CAML top-50.
 
-    Positive = we beat the baseline.
+    .. deprecated:: 2026-04-26
+        See ``DECISIONS.md`` 2026-04-26 — "Reframing Mullenbach 2018 from
+        benchmark to inspiration." Mullenbach's published numbers are on
+        MIMIC-III/ICD-9 top-50; this project trains on MIMIC-IV/ICD-10
+        top-50. Different dataset, different coding system, different
+        cohort, different label space. Numerical proximity does not
+        constitute benchmark equivalence and the deltas are
+        methodologically invalid as a comparison.
+
+        Retained as a no-op-with-warning so any downstream caller (e.g.
+        ``pipeline.run_evaluate_test``) surfaces the issue at runtime
+        instead of silently logging meaningless ``mullenbach_*_delta``
+        metrics. Will be removed once
+        ``pipeline.run_evaluate_test`` stops calling it.
+
+    Returns:
+        Empty dict. Issues a ``DeprecationWarning``.
     """
-    deltas = {
-        "micro_f1_delta": result.micro_f1 - MULLENBACH_CAML_TOP50["micro_f1"],
-        "macro_f1_delta": result.macro_f1 - MULLENBACH_CAML_TOP50["macro_f1"],
-    }
-    if 5 in result.precision_at_k and "p_at_5" in MULLENBACH_CAML_TOP50:
-        deltas["p_at_5_delta"] = result.precision_at_k[5] - MULLENBACH_CAML_TOP50["p_at_5"]
-    # Mullenbach Table 5 does not report P@8 for the 50-label setting — no
-    # apples-to-apples baseline exists, so we deliberately skip the delta.
-    if 8 in result.precision_at_k and "p_at_8" in MULLENBACH_CAML_TOP50:
-        deltas["p_at_8_delta"] = result.precision_at_k[8] - MULLENBACH_CAML_TOP50["p_at_8"]
-    return deltas
+    import warnings
+
+    warnings.warn(
+        "compare_to_mullenbach is deprecated as of 2026-04-26. The numeric "
+        "deltas are methodologically invalid (different dataset, different "
+        "coding system, different cohort vs. Mullenbach 2018). See "
+        "DECISIONS.md 2026-04-26. This function now returns an empty dict; "
+        "remove the call site to silence this warning.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return {}

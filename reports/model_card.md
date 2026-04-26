@@ -18,7 +18,7 @@ Template: Mitchell et al. 2019.
 
 ## Intended Use
 
-- **Primary use:** Production-grade benchmark for clinical NLP ICD-10 auto-coding on MIMIC-IV, deployed as an Azure Databricks Model Serving endpoint for reproducible inference. Demonstrates the full MLOps lifecycle — feature engineering, model validation against a published benchmark (Mullenbach et al. 2018 CAML), Unity Catalog Model Registry, drift monitoring.
+- **Primary use:** Reproducible end-to-end clinical NLP + MLOps reference build for ICD-10 auto-coding on MIMIC-IV, deployed as an Azure Databricks Model Serving endpoint for reproducible inference. Demonstrates the full MLOps lifecycle — feature engineering, multi-label model training and evaluation discipline, Unity Catalog Model Registry, drift monitoring. Methodologically inspired by Mullenbach et al. 2018 (CAML) on MIMIC-III/ICD-9; this work targets MIMIC-IV/ICD-10 and does not claim apples-to-apples benchmark equivalence (see [`DECISIONS.md`](../DECISIONS.md) 2026-04-26).
 - **Out of scope:** Clinical decision support, real-world coding workflows, any production health-system deployment. The MIMIC-IV license restricts use to research and benchmarking on credentialed PhysioNet data only.
 - **Users:** Data scientists and ML engineers evaluating production clinical NLP patterns; research teams benchmarking against this implementation on MIMIC-IV top-50 ICD-10.
 
@@ -26,7 +26,7 @@ Template: Mitchell et al. 2019.
 
 Cohort definition, composition, and limitations are documented in [`reports/data_card.md`](data_card.md). Model-specific details:
 
-- Modelable cohort: **122,288 admissions**.
+- Modelable cohort: **122,283 admissions**.
 - Splits: patient-level 80/10/10 by `subject_id`, seed = 42.
 - Labels: top-50 ICD-10 codes, covering 91.04% of cohort admissions.
 
@@ -34,22 +34,24 @@ Cohort definition, composition, and limitations are documented in [`reports/data
 
 - **Test split:** Held-out 10% of patients, no overlap with train or val.
 - **Metrics:** Micro F1, Macro F1, P@5, P@8, per-label F1.
-- **Reference baseline:** Mullenbach et al. 2018 CAML on MIMIC-III top-50 ICD-9 — Table 5 of the paper. Micro F1 = 0.614, Macro F1 = 0.532, P@5 = 0.609. P@8 is not reported for the top-50 setting.
+- **Methodological inspiration:** Mullenbach et al. 2018 (CAML) established the multi-label ICD-coding benchmark on MIMIC-III/ICD-9 top-50 — its multi-label framing, patient-level evaluation discipline, and top-50 cardinality are inherited here. Numerical comparison is *not* methodologically valid because this work targets MIMIC-IV/ICD-10 (different dataset, different coding system, different cohort, different label space). See [`DECISIONS.md`](../DECISIONS.md) 2026-04-26.
 
-Full evaluation methodology and comparison caveats are in [`reports/eval_report.qmd`](eval_report.qmd).
+Full evaluation methodology is in [`reports/eval_report.qmd`](eval_report.qmd).
 
 ## Performance
 
-| Metric | Target | Floor | Mullenbach 2018 CAML (MIMIC-III top-50) | Target Δ vs. CAML | Result |
-|---|---|---|---|---|---|
-| Micro F1 | ≥ 0.70 | 0.55 | 0.614 | +0.086 | **0.617** (baseline) / TBD (transformer) |
-| Macro F1 | ≥ 0.55 | 0.40 | 0.532 | +0.018 | **0.584** (baseline) / TBD (transformer) |
-| P@5 | ≥ 0.70 | — | 0.609 | +0.091 | 0.526 (baseline) / TBD (transformer) |
-| P@8 | ≥ 0.65 | — | n/a (Mullenbach Table 5 reports P@5 only) | — | 0.433 (baseline) / TBD (transformer) |
+Test-split results on MIMIC-IV-Note v2.2 + MIMIC-IV v3.1 Hosp, top-50 ICD-10 codes. Patient-level held-out test split, n=12,091 admissions, seed=42.
 
-Baseline = TF-IDF (1–2 gram, min_df=5, max_features=200k) + One-vs-Rest Logistic Regression (`class_weight="balanced"`, liblinear solver, max_iter=1000) with per-label F1-optimal thresholds. Evaluated on held-out patient-level test split, n=12,091 admissions, seed=42. MLflow run `4e577699a67a4027bc27628e9b237ac5`. Baseline beats Mullenbach CAML on both F1 metrics; P@k is intentionally de-emphasized for the baseline and is the transformer branch's primary gate — see [`DECISIONS.md`](../DECISIONS.md) 2026-04-23.
+| Metric | Target | Floor | Result |
+|---|---|---|---|
+| Micro F1 | ≥ 0.70 | 0.55 | **0.617** (baseline) / TBD (transformer) |
+| Macro F1 | ≥ 0.55 | 0.40 | **0.584** (baseline) / TBD (transformer) |
+| P@5 | ≥ 0.70 | — | 0.526 (baseline) / TBD (transformer) |
+| P@8 | ≥ 0.65 | — | 0.433 (baseline) / TBD (transformer) |
 
-CAML values from Mullenbach et al. 2018 Table 5 (MIMIC-III, 50 labels). See [`src/mimic_icd_coder/evaluate.py::MULLENBACH_CAML_TOP50`](../src/mimic_icd_coder/evaluate.py) for the citation.
+Targets are absolute, not benchmark-relative. They reflect the operational threshold for "the transformer branch is delivering value over the baseline" rather than a literature comparison.
+
+Baseline = TF-IDF (1–2 gram, min_df=5, max_features=200k) + One-vs-Rest Logistic Regression (`class_weight="balanced"`, liblinear solver, max_iter=1000) with per-label F1-optimal thresholds. MLflow run `4e577699a67a4027bc27628e9b237ac5`. P@k is intentionally de-emphasized for the baseline and is the transformer branch's primary gate — see [`DECISIONS.md`](../DECISIONS.md) 2026-04-23.
 
 ## Fairness Analysis
 
