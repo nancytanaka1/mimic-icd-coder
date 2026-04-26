@@ -1,53 +1,69 @@
 # mimic-icd-coder
 
-**Multi-label ICD-10 auto-coder for hospital discharge summaries — a production MLOps benchmark study.**
+**Multi-label ICD-10 auto-coder for hospital discharge summaries — a reproducible clinical NLP + MLOps reference build.**
 
-End-to-end clinical NLP pipeline deployed on Azure Databricks (Delta Lake + Unity Catalog + MLflow + Model Serving), benchmarked against Mullenbach et al. 2018 (CAML) on MIMIC-IV top-50 ICD-10. Reproducible on a single workstation or in the cloud without code branches; every methodological choice is pre-registered in [`DECISIONS.md`](DECISIONS.md) and defended in [`reports/EDA_Report.docx`](reports/EDA_Report.docx).
+End-to-end clinical NLP pipeline on Azure Databricks (Delta Lake + Unity Catalog + MLflow + Model Serving), built on MIMIC-IV-Note v2.2 + MIMIC-IV v3.1 Hosp. Reproducible on a single workstation or in the cloud without code branches; every methodological choice is pre-registered in `DECISIONS.md` and defended in `reports/`.
 
-**Purpose and compliance posture.** Research benchmark replication of Mullenbach 2018 (CAML) on MIMIC-IV ICD-10 auto-coding, plus MLOps methodology demonstration for credentialed clinical NLP. Scientific-research use only under the [PhysioNet Credentialed Health Data License v1.5.0](https://physionet.org/content/mimiciv/view-license/3.1/) — not a clinical product, not a commercial service, not for real-world patient care. No MIMIC data or trained weights are redistributed through this repository; only aggregate research results (metrics, methodology, code, synthetic examples) are published here. Reproduction requires independent PhysioNet credentialing and CITI training.
+> **Methodological note.** This project is *inspired by* Mullenbach et al. 2018 (CAML), which established the multi-label ICD coding benchmark on MIMIC-III/ICD-9. This work targets MIMIC-IV/ICD-10 — a different dataset and coding system. Numerical results are reported on their own terms, not as an apples-to-apples replication. See [§6 Evaluation](#6-evaluation) for the full caveat.
 
-**Headline result** (baseline complete; transformer pending):
+## Purpose and compliance posture
 
-| Metric | Baseline (TF-IDF + LR) | Chunked Bio_ClinicalBERT | Mullenbach 2018 CAML (MIMIC-III top-50) |
-|---|---|---|---|
-| Micro F1 | **0.617** (+0.003 vs. CAML) | TBD | 0.614 |
-| Macro F1 | **0.584** (+0.052 vs. CAML) | TBD | 0.532 |
-| P@5 | 0.526 (−0.083 vs. CAML) | TBD | 0.609 |
-| P@8 | 0.433 | TBD | n/a (not reported for top-50) |
+Scientific-research use only under the PhysioNet Credentialed Health Data License v1.5.0. This repository builds a reproducible MIMIC-IV/ICD-10 multi-label coding pipeline and demonstrates production-grade MLOps methodology for credentialed clinical NLP. **Not a clinical product. Not a commercial service. Not for clinical decision support.** No MIMIC data or trained weights are redistributed through this repository — only aggregate research results (metrics, methodology, code, synthetic examples). Reproduction requires independent PhysioNet credentialing and CITI training.
 
-Source: Mullenbach et al. 2018 Table 5. Baseline evaluated on held-out patient-level test split (n=12,091 admissions, seed=42). Val→test drift <0.01 on every metric, confirming val-tuned thresholds generalize. Leakage prevention is architectural, not inferred from the drift: train/val/test are disjoint by `subject_id`, verified in [`tests/test_smoke.py::test_patient_split_disjoint`](tests/test_smoke.py). Baseline uses `class_weight="balanced"` + per-label F1-optimal thresholds, which trades ranking calibration (P@k) for per-label F1 — a deliberate baseline choice. P@k reclaim is the transformer branch's objective. See [`DECISIONS.md`](DECISIONS.md) 2026-04-23.
+## Headline results
 
-**Reproducibility.** `mic run-all --config configs/dev.nancy.yml` on fresh MIMIC-IV v3.1 Hosp + MIMIC-IV-Note v2.2 raw CSVs reproduces every headline metric to **15+ decimal places** (verified 2026-04-24, MLflow run `6e809d5dfd3b46dbafae84ddba710bd7`). Reproducibility comes from a fixed patient-split seed (42), a deterministic liblinear solver, and file-on-disk stage boundaries that make each step independently re-runnable. A reviewer with PhysioNet credentials cloning this repo will get identical numbers end-to-end.
+Test-split results on MIMIC-IV-Note v2.2 + MIMIC-IV v3.1 Hosp, top-50 ICD-10 codes. Patient-level held-out test split, n=12,091 admissions, seed=42.
 
-For the full data card, model card, EDA paper, and evaluation methodology, see [`reports/`](reports/).
-For AI-assistance disclosure, see [`ACKNOWLEDGMENTS.md`](ACKNOWLEDGMENTS.md).
+| Metric | Baseline (TF-IDF + LR) | Chunked Bio_ClinicalBERT |
+|---|---|---|
+| Micro F1 | **0.6174** | TBD |
+| Macro F1 | **0.5843** | TBD |
+| P@5 | 0.5259 | TBD |
+| P@8 | 0.4326 | TBD |
+| P@15 | 0.2935 | TBD |
+| Micro AUC | 0.9284 | TBD |
+| Macro AUC | 0.9097 | TBD |
+| Micro AUPRC | 0.6263 | TBD |
+| Macro AUPRC | 0.5739 | TBD |
+
+Backing MLflow run: `4e577699a67a4027bc27628e9b237ac5` (local file store, `data/mlruns/`).
+
+Baseline uses `OneVsRestClassifier(LogisticRegression(class_weight="balanced"))` over TF-IDF (1–2 grams, `min_df=5`, 200K vocab cap) with per-label decision thresholds tuned on validation by F1 maximization. The `class_weight="balanced"` + per-label F1 threshold combination deliberately trades ranked-precision (P@k) for per-label F1 — a documented baseline choice (`DECISIONS.md` 2026-04-23). Recovering P@k is an explicit objective of the transformer branch.
+
+Validation→test drift ≤ 0.005 on every metric, confirming val-tuned thresholds generalize. Train/val/test are disjoint by `subject_id`, verified architecturally in `tests/test_smoke.py::test_patient_split_disjoint` — patient-level splits prevent the writing-style leakage that admission-level splits allow.
+
+## Reproducibility
+
+`mic run-all --config configs/dev.yml` on fresh MIMIC-IV v3.1 Hosp + MIMIC-IV-Note v2.2 raw CSVs reproduces every headline metric to 15+ decimal places (verified 2026-04-24, MLflow run `6e809d5dfd3b46dbafae84ddba710bd7`). Reproducibility is architectural: fixed patient-split seed (42), deterministic `liblinear` solver, file-on-disk stage boundaries that make each step independently re-runnable. A reviewer with PhysioNet credentials cloning this repository will get identical numbers end-to-end.
+
+For the full data card, model card, EDA paper, and evaluation methodology, see `reports/`. AI-assistance disclosure: `ACKNOWLEDGMENTS.md`.
 
 ---
 
-## 1. Study & deployment summary
+## 1. Study summary
 
 | Attribute | Value |
 |---|---|
-| **Domain** | Clinical NLP — automated medical coding |
-| **Input** | Free-text discharge summaries (MIMIC-IV-Note v2.2) |
-| **Output** | Per-code probability and thresholded binary labels over top-50 ICD-10 codes |
-| **Training cohort** | **122,288 admissions** (MIMIC-IV v3.1 ICD-10 cohort ∩ v2.2 notes) |
-| **Top-50 coverage** | 91.04% of cohort admissions |
-| **License — code** | Apache-2.0 |
-| **License — data** | PhysioNet Credentialed Health Data License v1.5.0 (not redistributed) |
+| Domain | Clinical NLP — automated medical coding |
+| Input | Free-text discharge summaries (MIMIC-IV-Note v2.2) |
+| Output | Per-code probability + thresholded binary labels over top-50 ICD-10 codes |
+| Training cohort | 122,283 admissions (MIMIC-IV v3.1 ICD-10 cohort ∩ v2.2 notes) |
+| Top-50 coverage | 91.04% of cohort admissions |
+| License — code | Apache-2.0 |
+| License — data | PhysioNet Credentialed Health Data License v1.5.0 (not redistributed) |
 
-### Metric targets (top-50 ICD-10, patient-level test split)
+### Performance targets
 
-| Metric | Target | Floor | Mullenbach 2018 CAML (MIMIC-III top-50) | Target Δ vs. CAML |
-|---|---|---|---|---|
-| Micro F1 | ≥ 0.70 | 0.55 | 0.614 | +0.086 |
-| Macro F1 | ≥ 0.55 | 0.40 | 0.532 | +0.018 |
-| P@5 | ≥ 0.70 | — | 0.609 | +0.091 |
-| P@8 | ≥ 0.65 | — | n/a (Mullenbach Table 5 reports P@5 only) | — |
+Targets for the chunked Bio_ClinicalBERT branch on the patient-level test split. The TF-IDF+LR baseline floor is Micro F1 ≥ 0.55 — below that, something upstream is broken (cohort filter, split leakage, or label misalignment).
 
-Targets are for chunked Bio_ClinicalBERT. The TF-IDF+LR baseline is expected to clear Micro F1 ≥ 0.55. Below that, something upstream is broken — cohort filter, split leakage, or label misalignment.
+| Metric | Target | Floor |
+|---|---|---|
+| Micro F1 | ≥ 0.70 | 0.55 |
+| Macro F1 | ≥ 0.55 | 0.40 |
+| P@5 | ≥ 0.70 | — |
+| P@8 | ≥ 0.65 | — |
 
-CAML baseline values are from Mullenbach et al. 2018 Table 5 (MIMIC-III, 50 labels). See [`src/mimic_icd_coder/evaluate.py::MULLENBACH_CAML_TOP50`](src/mimic_icd_coder/evaluate.py) for the citation.
+Targets are absolute, not benchmark-relative. They reflect the operational threshold for "the transformer branch is delivering value over the baseline" rather than a literature comparison.
 
 ---
 
@@ -94,14 +110,14 @@ The same pipeline runs in two environments with no code branching. Only config p
 
 | Surface | Storage | Compute | Orchestration | Tracking | Use |
 |---|---|---|---|---|---|
-| **Local workstation** | Parquet on `E:\` | CPU (16 threads) | `mic` CLI | File-backed MLflow | Cohort construction, EDA, baseline iteration, tests |
-| **Azure Databricks** | ADLS Gen2 + Delta | CPU + GPU job clusters (NC6s_v3 for transformer) | Databricks Asset Bundles | Managed MLflow + Unity Catalog Model Registry | Transformer fine-tune, Model Serving, drift monitoring |
+| Local workstation | Parquet on local disk | CPU (16 threads) | `mic` CLI | File-backed MLflow | Cohort construction, EDA, baseline iteration, tests |
+| Azure Databricks | ADLS Gen2 + Delta | CPU + GPU job clusters (NC6s_v3 for transformer) | Databricks Asset Bundles | Managed MLflow + Unity Catalog Model Registry | Transformer fine-tune, Model Serving, drift monitoring |
 
 ---
 
 ## 3. Data contracts
 
-Full cohort composition and preprocessing logic live in [`reports/data_card.md`](reports/data_card.md). Quick reference:
+Full cohort composition and preprocessing logic live in `reports/data_card.md`. Quick reference:
 
 ### 3.1 Inputs
 
@@ -113,7 +129,7 @@ Full cohort composition and preprocessing logic live in [`reports/data_card.md`]
 | `mimic-iv/hosp/patients.csv.gz` | v3.1 | `subject_id, gender, anchor_age, ...` | 364,627 rows |
 | `mimic-iv/hosp/d_icd_diagnoses.csv.gz` | v3.1 | `icd_code, icd_version, long_title` | ICD dictionary for human-readable descriptions |
 
-The v2.2/v3.1 mismatch is deliberate. `hadm_id` is stable across versions; only 61 of 331,793 notes (0.018%) are orphaned. Full rationale in [`DECISIONS.md`](DECISIONS.md) (2026-04-20).
+The v2.2/v3.1 mismatch is deliberate. `hadm_id` is stable across versions; only 61 of 331,793 notes (0.018%) are orphaned. Full rationale in `DECISIONS.md` (2026-04-20).
 
 ### 3.2 Stage outputs
 
@@ -122,8 +138,8 @@ The v2.2/v3.1 mismatch is deliberate. `hadm_id` is stable across versions; only 
 | Bronze | `bronze/{discharge_notes,diagnoses_icd,admissions,patients,d_icd_diagnoses}.parquet` | source schema | Lossless columnar mirror |
 | Silver | `silver/notes.parquet` | `hadm_id, subject_id, text, n_tokens` | One row per admission; `n_tokens ≥ 100` |
 | Gold | `gold/labels.npz` | CSR `(n_admissions, 50)` | Rows aligned 1:1 to `silver/notes.parquet` |
-| Gold | `gold/label_names.json` | list[str] length 50 | ICD-10 codes in column order |
-| Gold | `gold/hadm_ids.parquet` | `hadm_id` | Row-to-hadm_id lookup |
+| Gold | `gold/label_names.json` | `list[str]` length 50 | ICD-10 codes in column order |
+| Gold | `gold/hadm_ids.parquet` | `hadm_id` | Row-to-`hadm_id` lookup |
 | Gold | `gold/splits.parquet` | `row_idx, split` | Patient-level 80/10/10; no `subject_id` spans splits |
 | Gold | `gold/baseline_model.joblib` | vectorizer + 50 LR heads | Output of `fit_baseline` |
 | Gold | `gold/baseline_thresholds.npy` | `float64[50]` | Per-label thresholds tuned on val |
@@ -136,16 +152,16 @@ Defined in `configs/*.yml` under `cohort:`.
 
 | Rule | Default | Rationale |
 |---|---|---|
-| `icd_version` | `10` | ICD-10 is operationally current; mixing fragments the label space |
+| `icd_version` | 10 | ICD-10 is operationally current; mixing fragments the label space |
 | `note_types` | `['DS']` | Discharge summaries only; v2.2 contains only DS |
-| `min_note_tokens` | `100` | Drops near-empty notes that hurt baseline precision |
-| `top_k_labels` | `50` | Direct comparability to Mullenbach et al. 2018 |
+| `min_note_tokens` | 100 | Drops near-empty notes that hurt baseline precision |
+| `top_k_labels` | 50 | Standard label-set size in the multi-label coding literature |
 
 ---
 
 ## 4. Pipeline stages
 
-Each stage is an idempotent function in [`src/mimic_icd_coder/pipeline.py`](src/mimic_icd_coder/pipeline.py) with a Parquet or npz checkpoint. Downstream stages read from disk, so any step can be re-run without recomputing upstream.
+Each stage is an idempotent function in `src/mimic_icd_coder/pipeline.py` with a Parquet or npz checkpoint. Downstream stages read from disk, so any step can be re-run without recomputing upstream.
 
 | Stage | Entry point | Reads | Writes | Runtime (laptop) |
 |---|---|---|---|---|
@@ -173,11 +189,11 @@ data/
 
 ## 5. Models
 
-Full details, architecture rationale, and ethics in [`reports/model_card.md`](reports/model_card.md).
+Full details, architecture rationale, and ethics in `reports/model_card.md`.
 
 ### 5.1 Baseline — TF-IDF + one-vs-rest LogisticRegression
 
-[`src/mimic_icd_coder/models/baseline.py`](src/mimic_icd_coder/models/baseline.py)
+`src/mimic_icd_coder/models/baseline.py`
 
 | Parameter | Default | Config key |
 |---|---|---|
@@ -185,19 +201,19 @@ Full details, architecture rationale, and ethics in [`reports/model_card.md`](re
 | min doc freq | 5 | `baseline.tfidf_min_df` |
 | max features | 200,000 | `baseline.tfidf_max_features` |
 | LR C | 1.0 | `baseline.logreg_c` |
-| class_weight | `balanced` | `baseline.logreg_class_weight` |
+| `class_weight` | `balanced` | `baseline.logreg_class_weight` |
 
-Per-label decision thresholds are tuned on the validation split by maximizing per-label F1 ([`src/mimic_icd_coder/thresholds.py`](src/mimic_icd_coder/thresholds.py)).
+Per-label decision thresholds are tuned on the validation split by maximizing per-label F1 (`src/mimic_icd_coder/thresholds.py`).
 
 ### 5.2 Transformer — Chunked Bio_ClinicalBERT (primary)
 
-[`src/mimic_icd_coder/models/transformer.py`](src/mimic_icd_coder/models/transformer.py), [`jobs/train_transformer.py`](jobs/train_transformer.py)
+`src/mimic_icd_coder/models/transformer.py`, `jobs/train_transformer.py`
 
-Each note is split into contiguous 512-token chunks. Each chunk runs through the BERT encoder. Per-label logits are max-pooled across chunks. This recovers the signal that a single 512-token window would lose — 98.74% of notes exceed 512 whitespace tokens.
+Each note is split into contiguous 512-token chunks. Each chunk runs through the BERT encoder. Per-label logits are max-pooled across chunks. This recovers signal a single 512-token window would lose — 98.74% of notes exceed 512 whitespace tokens (per `reports/eda_report.md` §3 token-length analysis).
 
 | Parameter | Default | Config key |
 |---|---|---|
-| model | `emilyalsentzer/Bio_ClinicalBERT` | `transformer.model_name` |
+| model | `emilyalsentzer/Bio_ClinicalBERT` (Hugging Face, public weights) | `transformer.model_name` |
 | max sequence length per chunk | 512 | `transformer.max_length` |
 | batch size | 16 | `transformer.batch_size` |
 | learning rate | 2e-5 | `transformer.learning_rate` |
@@ -206,35 +222,33 @@ Each note is split into contiguous 512-token chunks. Each chunk runs through the
 | weight decay | 0.01 | `transformer.weight_decay` |
 | fp16 | true | `transformer.fp16` |
 
-Early stop on validation macro F1.
+Early stop on validation Macro F1.
 
 ### 5.3 Fallback — Clinical-Longformer
 
-Triggered only if chunked Bio_ClinicalBERT misses the Micro F1 target by more than 3 points. 4K-token context; ~3–5× slower training. Rationale in [`DECISIONS.md`](DECISIONS.md) (2026-04-20).
+Triggered only if chunked Bio_ClinicalBERT misses the Micro F1 target by more than 3 points. 4K-token context; ~3–5× slower training. Rationale in `DECISIONS.md` (2026-04-20).
 
 ---
 
 ## 6. Evaluation
 
-Full methodology and Mullenbach comparison caveats in [`reports/eval_report.qmd`](reports/eval_report.qmd).
+Full methodology in `reports/eval_report.qmd`.
 
 ### Test-split results
 
 Held-out patient-level test split, n=12,091 admissions, 6,567 patients. Seed 42. MLflow run `4e577699a67a4027bc27628e9b237ac5`.
 
-| Metric | Value | Target | Mullenbach CAML (MIMIC-III-50) |
-|---|---:|---:|---|
-| Micro F1 | 0.6174 | ≥ 0.70 | 0.614 (+0.003) |
-| Macro F1 | 0.5843 | ≥ 0.55 | 0.532 (+0.052) |
-| P@5 | 0.5259 | ≥ 0.70 | 0.609 (−0.083) |
-| P@8 | 0.4326 | ≥ 0.65 | n/a (not reported for top-50) |
-| P@15 | 0.2935 | — | — |
-| Micro AUC | 0.9284 | — | — |
-| Macro AUC | 0.9097 | — | — |
-| Micro AUPRC | 0.6263 | — | — |
-| Macro AUPRC | 0.5739 | — | — |
-
-Model: `sklearn.OneVsRestClassifier(LogisticRegression(class_weight="balanced"))` over TF-IDF (1–2 grams, `min_df=5`, 200 K vocab cap). Per-label thresholds tuned on val via F1 maximization. Val→test drift ≤ 0.005 on every metric, confirming val-tuned thresholds generalize. Train/val/test are disjoint by `subject_id` (verified in [`tests/test_smoke.py::test_patient_split_disjoint`](tests/test_smoke.py)) — this prevents the patient-writing-style leakage an admission-level split would allow.
+| Metric | Baseline (TF-IDF + LR) |
+|---|---|
+| Micro F1 | 0.6174 |
+| Macro F1 | 0.5843 |
+| P@5 | 0.5259 |
+| P@8 | 0.4326 |
+| P@15 | 0.2935 |
+| Micro AUC | 0.9284 |
+| Macro AUC | 0.9097 |
+| Micro AUPRC | 0.6263 |
+| Macro AUPRC | 0.5739 |
 
 ### Metrics used
 
@@ -245,7 +259,18 @@ Model: `sklearn.OneVsRestClassifier(LogisticRegression(class_weight="balanced"))
 | P@5 / P@8 / P@15 | Ranked-prediction precision for coder-assist workflow |
 | Per-label F1 | Error analysis on worst-performing labels |
 
-Mullenbach CAML deltas are computed in `compare_to_mullenbach` and logged as MLflow metrics.
+### On comparisons to prior work
+
+This work does **not** replicate Mullenbach et al. 2018 in a methodologically valid sense, and does not claim to. The differences are:
+
+- **Different dataset.** Mullenbach used MIMIC-III v1.4. This work uses MIMIC-IV v3.1 + MIMIC-IV-Note v2.2.
+- **Different coding system.** Mullenbach used ICD-9-CM. This work uses ICD-10-CM. The label spaces are non-overlapping; the top-50 codes in each are different sets covering different clinical concepts.
+- **Different cohort.** Different inclusion criteria, different size, different distributional properties.
+- **Different difficulty.** ICD-10 is more granular than ICD-9 (~70K codes vs ~14K). Top-50 ICD-10 prediction is a different problem from top-50 ICD-9 prediction.
+
+Numerical differences between this work's results and any number reported in Mullenbach 2018 (or downstream work on MIMIC-III) are confounded by all four factors. Such comparisons would be **non-equivalent and methodologically invalid**, and are not reported.
+
+What this work *does* take from Mullenbach 2018: the multi-label classification framing, the patient-level evaluation discipline, the use of P@k as a coder-assist-relevant metric, and the top-50 label cardinality as a tractable problem size. These are methodological inheritances, not benchmark equivalences. Future work to produce an apples-to-apples MIMIC-III/ICD-9 reproduction is tracked in `DECISIONS.md`.
 
 ---
 
@@ -253,7 +278,7 @@ Mullenbach CAML deltas are computed in `compare_to_mullenbach` and logged as MLf
 
 ### 7.1 Local CLI
 
-Entry points registered in [`pyproject.toml`](pyproject.toml), implemented in [`src/mimic_icd_coder/cli.py`](src/mimic_icd_coder/cli.py).
+Entry points registered in `pyproject.toml`, implemented in `src/mimic_icd_coder/cli.py`.
 
 ```bash
 mic ingest          --config configs/dev.yml
@@ -265,16 +290,16 @@ mic evaluate-test   --config configs/dev.yml
 mic run-all         --config configs/dev.yml
 ```
 
-`configs/dev.yml` is gitignored; copy [`configs/dev.example.yml`](configs/dev.example.yml) and fill in your MIMIC paths. `--artifacts <dir>` overrides the default `./data` checkpoint root.
+`configs/dev.yml` is gitignored; copy `configs/dev.example.yml` and fill in your MIMIC paths. `--artifacts <dir>` overrides the default `./data` checkpoint root.
 
 ### 7.2 Databricks Asset Bundle
 
-[`databricks.yml`](databricks.yml). Two targets:
+`databricks.yml`. Two targets:
 
 | Target | Catalog | Run-as | Compute |
 |---|---|---|---|
-| `dev` | `mimic_icd_dev` | workspace user | `Standard_DS4_v2` × 2 (Bronze), `Standard_DS5_v2` × 2 (baseline) |
-| `prod` | `mimic_icd` | service principal `mimic-icd-sp` | same + `Standard_NC6s_v3` single-node (1× V100) for transformer |
+| `dev` | `mimic_icd_dev` | workspace user | Standard_DS4_v2 × 2 (Bronze), Standard_DS5_v2 × 2 (baseline) |
+| `prod` | `mimic_icd` | service principal `mimic-icd-sp` | same + Standard_NC6s_v3 single-node (1× V100) for transformer |
 
 ```bash
 databricks bundle validate --target dev
@@ -288,20 +313,22 @@ databricks bundle run train_transformer --target prod
 
 Databricks Model Serving endpoint, GPU-backed.
 
-```json
+```http
 POST /serving-endpoints/mimic-icd-discharge/invocations
 {
   "dataframe_records": [
     {"text": "<discharge summary text>"}
   ]
 }
+```
 
 Response:
+```json
 {
   "predictions": [
     {
-      "codes":        ["I10", "I50.9", "N18.6", "E11.9", ...],
-      "scores":       [0.94, 0.87, 0.72, 0.68, ...],
+      "codes":        ["I10", "I50.9", "N18.6", "E11.9"],
+      "scores":       [0.94, 0.87, 0.72, 0.68],
       "thresholded":  ["I10", "I50.9"]
     }
   ]
@@ -312,7 +339,7 @@ Response:
 
 ## 8. Configuration
 
-Template: [`configs/dev.example.yml`](configs/dev.example.yml). User overrides go in `configs/dev.yml` or `configs/dev.<username>.yml`, both gitignored. Schema validated by Pydantic `AppConfig` in [`src/mimic_icd_coder/config.py`](src/mimic_icd_coder/config.py).
+Template: `configs/dev.example.yml`. User overrides go in `configs/dev.yml` or `configs/dev.<username>.yml`, both gitignored. Schema validated by Pydantic `AppConfig` in `src/mimic_icd_coder/config.py`.
 
 | Section | Purpose |
 |---|---|
@@ -341,17 +368,16 @@ Template: [`configs/dev.example.yml`](configs/dev.example.yml). User overrides g
 
 ## 10. Security & compliance
 
-Full details in [`reports/data_card.md`](reports/data_card.md). Headlines:
+Full details in `reports/data_card.md`. Headlines:
 
-- **Scientific-research use only** under the PhysioNet Credentialed Health Data License v1.5.0. This repository replicates a published benchmark (Mullenbach 2018) and demonstrates MLOps methodology for clinical NLP. It is not a clinical product, commercial service, decision-support tool, or clinical-care application. Trained model weights are scoped to this research purpose and are not redistributed.
+- **Scientific-research use only** under the PhysioNet Credentialed Health Data License v1.5.0. Not a clinical product, commercial service, decision-support tool, or clinical-care application.
 - **Re-identification.** No attempt to identify patients or institutions is made. Only aggregate cohort statistics, label-level metrics, and synthetic examples are published; no note text, admission IDs, or subject IDs leave local disk.
 - **Credentialing.** Reproducing results from raw data requires the reviewer to independently complete PhysioNet credentialing (CITI training + DUA agreement) before accessing MIMIC-IV. This repository does not grant any access to the underlying data.
-- MIMIC-IV data is credentialed under the PhysioNet Health Data License v1.5.0.
 - `.gitignore` blocks CSV, Parquet, gz, npz, joblib, and user-specific configs. No raw data enters this repository.
 - Training runs in the user's own Azure tenant (single-tenant Databricks workspace, private ADLS Gen2).
-- Clinical text must not be sent to third-party LLM APIs. Only open-weights models hosted inside the workspace are used.
-- CI runs only on synthetic fixtures in [`tests/fixtures/synthetic_notes.py`](tests/fixtures/synthetic_notes.py).
-- Notebook outputs are PHI-scanned by [`scripts/check_notebook_phi.py`](scripts/check_notebook_phi.py) in CI and pre-commit.
+- Clinical text is never sent to third-party LLM APIs. Only open-weights models hosted inside the workspace are used.
+- CI runs only on synthetic fixtures in `tests/fixtures/synthetic_notes.py`.
+- Notebook outputs are PHI-scanned by `scripts/check_notebook_phi.py` in CI and pre-commit.
 - Service-principal credentials are stored in Databricks secret scopes.
 
 ---
@@ -363,13 +389,13 @@ Full details in [`reports/data_card.md`](reports/data_card.md). Headlines:
 | Lint | `ruff check` | Pre-commit + CI |
 | Format | `black --check` (line length 100) | Pre-commit + CI |
 | Types | `mypy src` (strict) | CI |
-| Unit + integration tests | `pytest` (28 tests on synthetic fixtures, ~5 s) | CI + local |
+| Unit + integration tests | `pytest` (56 tests on synthetic fixtures, ~25 s) | CI + local |
 | Notebook output hygiene | `nbstripout` + PHI scanner | Pre-commit + CI |
 | Data-safety guards | Large-file check, private-key detection | Pre-commit |
 | Bundle validity | `databricks bundle validate --target dev` | Pre-deploy |
 | Metric floor | Baseline Micro F1 ≥ 0.55 on dev split | Manual review gate after `mic train-baseline` |
 
-Pre-commit config: [`.pre-commit-config.yaml`](.pre-commit-config.yaml). CI workflow: [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+Pre-commit config: `.pre-commit-config.yaml`. CI workflow: `.github/workflows/ci.yml`.
 
 ---
 
@@ -386,12 +412,12 @@ python -m venv .venv
 pip install -e ".[dev]"
 pre-commit install
 
-pytest -q                     # 28 tests, synthetic fixtures
+pytest -q                     # synthetic fixtures only
 ```
 
 ### 12.2 Local end-to-end on real MIMIC (requires PhysioNet credentials)
 
-See [`LOCAL_SETUP.md`](LOCAL_SETUP.md) for the workstation walkthrough (memory profile, expected row counts, runtime envelopes, GPU prerequisites).
+See `LOCAL_SETUP.md` for the workstation walkthrough (memory profile, expected row counts, runtime envelopes, GPU prerequisites).
 
 ```bash
 cp configs/dev.example.yml configs/dev.yml        # then edit data paths
@@ -420,8 +446,8 @@ mimic-icd-coder/
 │   ├── config.py             Pydantic AppConfig
 │   ├── pipeline.py           Stage orchestration + Paths
 │   ├── logging_utils.py      structlog configuration
-│   ├── eda.py                EDA analysis helpers (used by notebook)
-│   ├── evaluate.py           Metrics + Mullenbach comparison
+│   ├── eda.py                EDA analysis helpers
+│   ├── evaluate.py           Metrics
 │   ├── thresholds.py         Per-label threshold tuner
 │   ├── data/
 │   │   ├── ingest.py         gz CSV → DataFrame readers (pyarrow CSV engine)
@@ -432,35 +458,25 @@ mimic-icd-coder/
 │       ├── baseline.py       TF-IDF + LogReg + MLflow logger
 │       └── transformer.py    Chunked Bio_ClinicalBERT fine-tune wrapper
 ├── jobs/                     Databricks-entry-point scripts
-│   ├── bronze.py
-│   └── train_baseline.py
-├── notebooks/
-│   └── 01_eda.ipynb          Cohort + label distribution EDA
-├── scripts/
-│   └── check_notebook_phi.py PHI scanner (CI + pre-commit)
-├── configs/
-│   ├── dev.example.yml       Template (checked in)
-│   └── dev.*.yml             User-specific configs (gitignored)
-├── tests/
-│   ├── test_smoke.py         Import + config smoke
-│   ├── test_eda.py           EDA helpers
-│   ├── test_pipeline_integration.py  End-to-end on synthetic fixtures
-│   └── fixtures/synthetic_notes.py   Synthetic MIMIC-shaped generator
+├── notebooks/01_eda.ipynb    Cohort + label distribution EDA
+├── scripts/check_notebook_phi.py
+├── configs/                  dev.example.yml + gitignored user configs
+├── tests/                    Unit + integration tests on synthetic fixtures
 ├── reports/
-│   ├── data_card.md          Dataset provenance, composition, DUA
-│   ├── model_card.md         Model architecture, intended use, ethics
-│   ├── eval_report.qmd       Evaluation methodology + metrics
-│   ├── eda_report.md         Internal EDA audit
-│   └── EDA_Report.docx       Academic paper (IMRaD, Literature Review, citations)
-├── .github/workflows/ci.yml  Lint, type, test, PHI scan
-├── .pre-commit-config.yaml   Pre-commit hooks
-├── databricks.yml            Asset Bundle definition
-├── pyproject.toml            Build, tools, console scripts
-├── DECISIONS.md              Architectural decision log
-├── LOCAL_SETUP.md            Workstation setup playbook
-├── ACKNOWLEDGMENTS.md        AI-assistance disclosure
-├── LICENSE                   Apache 2.0 (code)
-└── README.md                 (this file)
+│   ├── data_card.md
+│   ├── model_card.md
+│   ├── eval_report.qmd
+│   ├── eda_report.md
+│   └── EDA_Report.docx
+├── .github/workflows/ci.yml
+├── .pre-commit-config.yaml
+├── databricks.yml
+├── pyproject.toml
+├── DECISIONS.md
+├── LOCAL_SETUP.md
+├── ACKNOWLEDGMENTS.md
+├── LICENSE
+└── README.md
 ```
 
 ---
@@ -472,14 +488,14 @@ mimic-icd-coder/
 | Scaffold, CI, pre-commit, Asset Bundle | Ready |
 | EDA notebook + paper + data card + model card + eval report | Complete |
 | Bronze ingestion (5 tables including ICD dictionary) | Implemented and run on real data |
-| Silver (clean + min-token filter) | **Shipped** — 122,283-note cohort built |
-| Gold (top-50 label matrix + patient splits) | **Shipped** — 50-label matrix on 122,283 admissions |
-| TF-IDF + LR baseline | **Shipped** — test Micro F1 0.617, Macro F1 0.584; beats Mullenbach CAML on F1 (see §6) |
+| Silver (clean + min-token filter) | Shipped |
+| Gold (top-50 label matrix + patient splits) | Shipped — 50-label matrix on 122,283 admissions |
+| TF-IDF + LR baseline | Shipped — test Micro F1 0.6174, Macro F1 0.5843 |
 | Per-label threshold tuning | Implemented |
-| Evaluation (Micro/Macro F1, P@k, Mullenbach deltas) | Implemented |
-| Per-label error analysis + calibration + confusion patterns | **Shipped** — see [`reports/baseline_error_analysis.md`](reports/baseline_error_analysis.md) |
-| MLflow + Unity Catalog Model Registry | Local MLflow wired; Registry write on Databricks only |
-| Chunked Bio_ClinicalBERT fine-tune | Scaffolded — [`jobs/train_transformer.py`](jobs/train_transformer.py); pre-registered predictions in error analysis doc |
+| Evaluation (Micro/Macro F1, P@k, AUC, AUPRC) | Implemented |
+| Per-label error analysis + calibration + confusion patterns | Shipped — see `reports/baseline_error_analysis.md` |
+| MLflow tracking | Local file store wired; Unity Catalog Registry write on Databricks only |
+| Chunked Bio_ClinicalBERT fine-tune | Scaffolded — `jobs/train_transformer.py`; pre-registered predictions in error analysis doc |
 | Clinical-Longformer fallback | Not started — trigger-driven |
 | Azure Databricks workspace + Unity Catalog bootstrap | Not started — branched from external bootstrap project |
 | Model Serving endpoint | Not started |
@@ -501,4 +517,4 @@ mimic-icd-coder/
 
 ## 16. License
 
-Code licensed under **Apache-2.0** ([LICENSE](LICENSE)). MIMIC data is licensed separately under the **PhysioNet Credentialed Health Data License v1.5.0** and is not redistributed via this repository.
+Code licensed under Apache-2.0 (`LICENSE`). MIMIC data is licensed separately under the PhysioNet Credentialed Health Data License v1.5.0 and is not redistributed via this repository.
