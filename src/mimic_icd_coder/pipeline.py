@@ -419,10 +419,15 @@ def run_evaluate_test(cfg: AppConfig, paths: Paths) -> dict[str, float]:
     scoreboard.
 
     Returns:
-        A flat dictionary of test metrics. Also includes ``mullenbach_*_delta``
-        keys — how far our numbers are from the published CAML baseline.
+        A flat dictionary of test metrics: micro/macro F1, AUC, AUPRC, P@k.
+
+    Note:
+        ``mullenbach_*_delta`` keys were previously included here. Removed
+        per ``DECISIONS.md`` 2026-04-26 — Mullenbach 2018's published numbers
+        are MIMIC-III/ICD-9 top-50; this work trains on MIMIC-IV/ICD-10
+        top-50, so the numerical deltas are methodologically invalid.
     """
-    from mimic_icd_coder.evaluate import compare_to_mullenbach, evaluate_multilabel
+    from mimic_icd_coder.evaluate import evaluate_multilabel
     from mimic_icd_coder.models.baseline import BaselineModel
 
     silver = pd.read_parquet(paths.silver / "notes.parquet")
@@ -442,7 +447,5 @@ def run_evaluate_test(cfg: AppConfig, paths: Paths) -> dict[str, float]:
         top_k_list=cfg.evaluation.top_k_metrics,
     )
     metrics = result.to_dict()
-    deltas = compare_to_mullenbach(result)
     logger.info("test.metrics", **metrics)
-    logger.info("test.vs_mullenbach", **deltas)
-    return {**metrics, **{f"mullenbach_{k}": v for k, v in deltas.items()}}
+    return metrics
