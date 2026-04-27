@@ -26,9 +26,9 @@ Template: Mitchell et al. 2019.
 
 Cohort definition, composition, and limitations are documented in [`reports/data_card.md`](data_card.md). Model-specific details:
 
-- Modelable cohort: **122,283 admissions**.
+- Modelable cohort: **122,288 admissions** across **65,665 patients**.
 - Splits: patient-level 80/10/10 by `subject_id`, seed = 42.
-- Labels: top-50 ICD-10 codes, covering 91.04% of cohort admissions.
+- Labels: top-50 ICD-10 codes, covering 94.12% of cohort admissions.
 
 ## Evaluation Data
 

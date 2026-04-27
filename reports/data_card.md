@@ -22,9 +22,9 @@ Cohort construction is a four-stage filter. Final modelable cohort: **122,288 ad
 | Raw discharge notes (v2.2) | 331,793 | — |
 | Inner join with v3.1 admissions | 331,732 | 61 (version drift) |
 | Restrict to ICD-10 admissions | 122,288 | 209,444 (ICD-9 admissions, by design) |
-| Minimum 100 whitespace tokens | TBD at Silver | minor |
+| Minimum 100 whitespace tokens | 122,283 | 5 (notes shorter than 100 whitespace tokens) |
 
-Top-50 ICD-10 codes cover 91.04% of admissions. Long tail: 19,440 distinct codes.
+Top-50 ICD-10 codes cover 94.12% of cohort admissions. Long tail: 19,440 distinct codes.
 
 ## Data Dictionary
 
