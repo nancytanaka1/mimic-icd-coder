@@ -26,8 +26,8 @@ Given a free-text discharge summary, predict the set of ICD-10 codes assigned to
 Cohort construction, composition, and limitations are documented in [`reports/data_card.md`](data_card.md). Headline numbers:
 
 - MIMIC-IV-Note v2.2 + MIMIC-IV v3.1 Hosp, joined on `hadm_id`.
-- Top-50 ICD-10 codes covering 91.04% of admissions; long tail spans 19,440 distinct codes.
-- Modelable cohort: **122,283 admissions**.
+- Top-50 ICD-10 codes covering 94.12% of cohort admissions; long tail spans 19,440 distinct codes.
+- Modelable cohort: **122,288 admissions** across **65,665 patients**.
 - Splits: patient-level 80/10/10 by `subject_id`, seed = 42.
 
 # Methods
@@ -35,7 +35,7 @@ Cohort construction, composition, and limitations are documented in [`reports/da
 | Component | Choice | Rationale |
 |---|---|---|
 | Preprocessing | Collapse `___` to `[REDACTED]`, normalize whitespace, drop notes under 100 tokens | Minimal intervention; preserves clinical language |
-| Split | Patient-level, seed = 42 | 44.83% of patients have multiple admissions; admission-level splits would leak |
+| Split | Patient-level, seed = 42 | 35.05% of cohort patients have multiple admissions; admission-level splits would leak |
 | Baseline | TF-IDF (1–2 gram, min_df = 5) + one-vs-rest Logistic Regression | Interpretable control; defines the floor every transformer must clear |
 | Primary transformer | Bio_ClinicalBERT with chunk-and-max-pool over 512-token chunks | 98.74% of notes exceed a single 512-token window; chunking recovers the signal |
 | Fallback | Clinical-Longformer, 4K tokens | Escalation only if chunked BERT misses the Micro F1 target (≥ 0.70) by more than 3 points |

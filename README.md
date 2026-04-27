@@ -47,8 +47,8 @@ For the full data card, model card, EDA paper, and evaluation methodology, see `
 | Domain | Clinical NLP — automated medical coding |
 | Input | Free-text discharge summaries (MIMIC-IV-Note v2.2) |
 | Output | Per-code probability + thresholded binary labels over top-50 ICD-10 codes |
-| Training cohort | 122,283 admissions (MIMIC-IV v3.1 ICD-10 cohort ∩ v2.2 notes) |
-| Top-50 coverage | 91.04% of cohort admissions |
+| Training cohort | 122,288 admissions across 65,665 patients (MIMIC-IV v3.1 ICD-10 cohort ∩ v2.2 notes) |
+| Top-50 coverage | 94.12% of cohort admissions |
 | License — code | Apache-2.0 |
 | License — data | PhysioNet Credentialed Health Data License v1.5.0 (not redistributed) |
 
@@ -489,7 +489,7 @@ mimic-icd-coder/
 | EDA notebook + paper + data card + model card + eval report | Complete |
 | Bronze ingestion (5 tables including ICD dictionary) | Implemented and run on real data |
 | Silver (clean + min-token filter) | Shipped |
-| Gold (top-50 label matrix + patient splits) | Shipped — 50-label matrix on 122,283 admissions |
+| Gold (top-50 label matrix + patient splits) | Shipped — 50-label matrix on 122,288 admissions |
 | TF-IDF + LR baseline | Shipped — test Micro F1 0.6174, Macro F1 0.5843 |
 | Per-label threshold tuning | Implemented |
 | Evaluation (Micro/Macro F1, P@k, AUC, AUPRC) | Implemented |

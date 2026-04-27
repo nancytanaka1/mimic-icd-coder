@@ -21,7 +21,7 @@ Format: `[Decision]: [What was chosen] — [Why] — [Alternatives considered]`
 - **What:** Predict the 50 most frequent ICD-10 codes in the MIMIC-IV Hosp diagnoses table.
 - **Why:** Published benchmark (Mullenbach et al. 2018) used top-50 on MIMIC-III. Direct comparability; keeps the label space tractable for BERT fine-tuning.
 - **Alternatives:** All ~18K ICD-10 codes (intractable), top-10 (too easy), disease-category roll-up (less useful clinically).
-- **Update 2026-04-22:** Cohort-aware top-50 verified after `mic gold`. `Z20.822` (COVID exposure, post-hoc, insufficient cohort support in MIMIC-IV-Note v2.2 window) dropped; `N18.3`, `J18.9`, `Y92.239`, `Z23` added in its place. Final cohort 122,283 admissions; `data/gold/label_names.json` confirmed.
+- **Update 2026-04-22:** Cohort-aware top-50 verified after `mic gold`. `Z20.822` (COVID exposure, post-hoc, insufficient cohort support in MIMIC-IV-Note v2.2 window) dropped; `N18.3`, `J18.9`, `Y92.239`, `Z23` added in its place. Final cohort 122,288 admissions across 65,665 patients (per `notebooks/01_eda.ipynb` §10 Table B4 and `reports/EDA_Report.docx`); `data/gold/label_names.json` confirmed.
 
 ## 2026-04-20 — Patient-level train/val/test split
 - **What:** Partition by `subject_id`, not by `hadm_id`. 80/10/10 stratified by label presence.
@@ -77,12 +77,6 @@ Format: `[Decision]: [What was chosen] — [Why] — [Alternatives considered]`
 - **Alternatives:** (1) Re-train with `class_weight=null` to recover P@k — rejected, likely trades Macro F1 below Mullenbach's 0.532 and weakens the headline result. (2) Switch per-label threshold tuning objective from F1 to ranking-aware (NDCG or P@k) — rejected as scope creep; the transformer branch should own ranking calibration end-to-end. (3) Hold the branch until transformer arrives — rejected, the baseline is its own verifiable deliverable.
 - **Consequence for exit criteria:** P@5 and P@8 floors for this branch are downgraded from "hard gate" to "informational for baseline, primary gate for transformer." F1 floors remain hard gates.
 - **Evidence:** `logs/train_baseline.log`, `logs/evaluate_test.log`, `data/gold/baseline_model.joblib`, `data/gold/baseline_thresholds.npy`, MLflow run above. Reproduce with `mic train-baseline --config configs/dev.nancy.yml` followed by `mic evaluate-test --config configs/dev.nancy.yml` on the persisted Silver/Gold artifacts.
-
-
-## [YYYY-MM-DD] — [Next decision]
-- **What:**
-- **Why:**
-- **Alternatives:**
 
 ## 2026-04-24 — Transformer fine-tune loop validated locally on T1200
 **Goal:** prove the Bio_ClinicalBERT fine-tune loop runs end-to-end on local
@@ -140,7 +134,6 @@ on Databricks GPU.
 
 
 ## 2026-04-26 — Reframing Mullenbach 2018 from benchmark to inspiration
-
 Earlier drafts of the README presented numerical deltas between this work's
 results on MIMIC-IV/ICD-10 top-50 and Mullenbach et al. 2018's results on
 MIMIC-III/ICD-9 top-50 (Table 5). On review, the comparison is
@@ -164,3 +157,8 @@ Affected:
 - README.md (headline, §1, §6, §14)
 - src/mimic_icd_coder/evaluate.py (compare_to_mullenbach function deprecated)
 - MLflow logged metrics (delta_vs_caml_* removed from baseline runs going forward)
+
+## [YYYY-MM-DD] — [Next decision]
+- **What:**
+- **Why:**
+- **Alternatives:**
